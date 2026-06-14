@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Driver Check-In | All Purpose Transport</title>
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260614-2">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
+        <div>
+          <h1>Driver Check-In</h1>
+          <p class="subtitle">All Purpose Transport crossdock arrivals</p>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Pages">
+        <a class="active" href="driver-checkin.html">Driver Page</a>
+        <a href="manager-queue.html">Manager Page</a>
+        <a href="forklift-operator.html">Forklift Page</a>
+      </nav>
+    </header>
+
+    <section class="page-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Register Arrival</h2>
+          <p>Check in here, then wait until the crossdock manager calls you forward.</p>
+        </div>
+
+        <div id="registrationControls">
+        <div class="tabs" role="tablist" aria-label="Arrival type">
+          <button class="tab active" id="localTab" type="button" role="tab" aria-selected="true">Local Driver</button>
+          <button class="tab" id="linehaulTab" type="button" role="tab" aria-selected="false">Outside Carrier</button>
+        </div>
+
+        <form id="localForm">
+          <label for="driverNumber">Driver number</label>
+          <select id="driverNumber" required>
+            <option value="">Select driver number</option>
+          </select>
+          <label for="actionsRequired">Actions required</label>
+          <input id="actionsRequired" autocomplete="off" placeholder="Example: Dropping off 4 pallets and reloading for Capalaba" required>
+          <button class="primary" type="submit">Register Arrival</button>
+        </form>
+
+        <form id="linehaulForm" class="hidden">
+          <label for="customerName">Customer name</label>
+          <select id="customerName" required>
+            <option value="">Select customer</option>
+            <option>Petbarn</option>
+            <option>Ames</option>
+            <option>Yatsal</option>
+            <option>VT</option>
+            <option value="Other">Other</option>
+          </select>
+          <div id="otherCustomerWrap" class="conditional hidden">
+            <label for="otherCustomer">Custom customer name</label>
+            <input id="otherCustomer" autocomplete="organization" placeholder="Enter customer name">
+          </div>
+          <label for="movementType">Movement type</label>
+          <select id="movementType" required>
+            <option value="">Select movement</option>
+            <option>Inbound</option>
+            <option>Pickup</option>
+          </select>
+          <label for="vehicleType">Vehicle type</label>
+          <select id="vehicleType" required>
+            <option value="">Select vehicle type</option>
+            <option>Rigid</option>
+            <option>Semi trailer</option>
+            <option>B double</option>
+            <option>A double</option>
+          </select>
+          <div id="palletCapacityWrap" class="conditional hidden">
+            <label for="palletCapacity">Pallet space capacity</label>
+            <select id="palletCapacity">
+              <option value="">Select pallet spaces</option>
+              <option>4</option>
+              <option>5</option>
+              <option>6</option>
+              <option>7</option>
+              <option>8</option>
+              <option>9</option>
+              <option>10</option>
+              <option>11</option>
+              <option>12</option>
+              <option>13</option>
+              <option>14</option>
+              <option>15</option>
+              <option>16</option>
+            </select>
+          </div>
+          <label for="linehaulRego">Front registration plate</label>
+          <input id="linehaulRego" autocomplete="off" placeholder="Example: NSW456" required>
+          <label for="vehicleDescription">Vehicle description</label>
+          <input id="vehicleDescription" autocomplete="off" placeholder="Example: Jim Peterson TPT or red curtains" required>
+          <label for="outsideDriverName">Driver name</label>
+          <input id="outsideDriverName" autocomplete="name" placeholder="Example: Jim Peterson" required>
+          <label for="phoneNumber">Driver phone number</label>
+          <input id="phoneNumber" autocomplete="tel" inputmode="tel" placeholder="Example: 0400 000 000" required>
+          <button class="primary" type="submit">Register Arrival</button>
+        </form>
+        </div>
+
+        <div class="notice" id="notice" role="status"></div>
+        <div class="driver-status" id="driverStatus"></div>
+        <section class="driver-message-activity hidden" id="driverMessageActivity">
+          <div class="driver-message-head">
+            <h2>Activity History</h2>
+            <p>Arrival events, requests, messages, and outcomes appear here.</p>
+          </div>
+          <div class="message-list" id="driverMessageList"></div>
+        </section>
+      </div>
+    </section>
+
+    <div class="modal-backdrop hidden" id="driverMessageModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="driverMessageTitle">
+        <div class="modal-head"><h2 id="driverMessageTitle">Message User</h2></div>
+        <form id="driverMessageForm">
+          <label for="driverMessageRecipient">Recipient</label>
+          <select id="driverMessageRecipient" required></select>
+          <label for="driverMessageText">Message</label>
+          <textarea id="driverMessageText" maxlength="240" placeholder="Enter a short message" required></textarea>
+          <button class="primary" type="submit">Send Message</button>
+          <button class="secondary" id="cancelDriverMessage" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="inductionModal">
+      <div class="modal induction-modal" role="dialog" aria-modal="true" aria-labelledby="inductionTitle">
+        <div class="modal-head">
+          <h2 id="inductionTitle">Outside Carrier Site Induction</h2>
+          <p class="modal-subtitle">Read and acknowledge these rules before joining the waiting queue.</p>
+        </div>
+        <form id="inductionForm">
+          <ol class="site-rules">
+            <li><strong>Remain in the designated waiting area</strong> until directed to enter the crossdock.</li>
+            <li><strong>Wear required PPE</strong>, including high-visibility clothing and enclosed safety footwear.</li>
+            <li><strong>Follow the site speed limit, signs, marked walkways, and staff directions</strong> at all times.</li>
+            <li><strong>Do not enter loading zones or operate loading equipment</strong> unless authorised by All Purpose staff.</li>
+            <li><strong>Use a spotter when directed and take extra care when reversing.</strong> Stop immediately if visibility is unclear.</li>
+            <li><strong>Do not use a handheld phone while driving or moving around operational areas.</strong></li>
+            <li><strong>Report hazards, damage, spills, injuries, and emergencies immediately</strong> to the manager or forklift operator.</li>
+          </ol>
+          <label class="check-row" for="inductionAccepted">
+            <input id="inductionAccepted" type="checkbox" required>
+            <span>I have read, understood, and agree to follow the site rules.</span>
+          </label>
+          <button class="primary" type="submit">Accept Induction and Join Queue</button>
+          <button class="secondary" id="cancelInduction" type="button">Back</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="departureRequestModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="departureRequestTitle">
+        <div class="modal-head"><h2 id="departureRequestTitle">Departure Request</h2></div>
+        <form id="departureRequestForm">
+          <label for="departureReason">Reason for leaving</label>
+          <textarea id="departureReason" maxlength="300" placeholder="Explain why you need to leave" required></textarea>
+          <button class="primary" type="submit">Send Request</button>
+          <button class="secondary" id="cancelDepartureRequest" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="incomingDriverMessageModal">
+      <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="incomingDriverMessageTitle">
+        <div class="modal-head"><h2 id="incomingDriverMessageTitle">Message From Manager</h2></div>
+        <div class="modal-body"><p id="incomingDriverMessageText"></p></div>
+        <div class="modal-actions">
+          <button class="primary" id="acknowledgeDriverMessage" type="button">Acknowledge</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="apt-crossdock.js?v=20260614-2"></script>
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const localTab = $("#localTab");
+    const linehaulTab = $("#linehaulTab");
+    const localForm = $("#localForm");
+    const linehaulForm = $("#linehaulForm");
+    const registrationControls = $("#registrationControls");
+    const notice = $("#notice");
+    const driverStatus = $("#driverStatus");
+    const driverMessageActivity = $("#driverMessageActivity");
+    const driverMessageList = $("#driverMessageList");
+    let audioContext = null;
+    let alertTimers = [];
+    let soundAlertsEnabled = false;
+    let localDriverProfiles = {};
+    let activeDriverMessageId = "";
+    let departureRequestType = "";
+    let pendingOutsideArrival = null;
+
+    async function loadDriverProfiles() {
+      const drivers = await aptCrossdock.loadLocalDrivers();
+      localDriverProfiles = Object.fromEntries(drivers.map((driver) => [driver.driverNumber, driver]));
+      $("#driverNumber").innerHTML = '<option value="">Select driver number</option>'
+        + drivers
+          .sort((a, b) => String(a.driverNumber).localeCompare(String(b.driverNumber), undefined, { numeric: true }))
+          .map((driver) => `<option value="${aptCrossdock.escapeHtml(driver.driverNumber)}">${aptCrossdock.escapeHtml(driver.driverNumber)}</option>`)
+          .join("");
+    }
+
+    function setType(type) {
+      const isLocal = type === "local";
+      localTab.classList.toggle("active", isLocal);
+      linehaulTab.classList.toggle("active", !isLocal);
+      localTab.setAttribute("aria-selected", String(isLocal));
+      linehaulTab.setAttribute("aria-selected", String(!isLocal));
+      localForm.classList.toggle("hidden", !isLocal);
+      linehaulForm.classList.toggle("hidden", isLocal);
+      notice.classList.remove("show");
+    }
+
+    function showNotice(message) {
+      notice.textContent = message;
+      notice.classList.add("show");
+    }
+
+    async function armAudio(playConfirmation = false) {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return false;
+        if (!audioContext) audioContext = new AudioContextClass();
+        if (audioContext.state === "suspended") await audioContext.resume();
+        soundAlertsEnabled = audioContext.state === "running";
+        if (soundAlertsEnabled && playConfirmation) playAlertTone();
+        return soundAlertsEnabled;
+      } catch {
+        soundAlertsEnabled = false;
+        return false;
+      }
+    }
+
+    function playAlertTone(duration = 0.16) {
+      if (!audioContext || audioContext.state !== "running") return;
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+      gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.35, audioContext.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + duration);
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + duration + 0.02);
+    }
+
+    function playCalledAlert() {
+      stopCalledAlert();
+      [0, 240, 480, 720, 960, 1200].forEach((delay) => {
+        alertTimers.push(setTimeout(playAlertTone, delay));
+      });
+      if (navigator.vibrate) navigator.vibrate([180, 70, 180, 70, 180, 70, 180]);
+    }
+
+    function stopCalledAlert() {
+      alertTimers.forEach(clearTimeout);
+      alertTimers = [];
+    }
+
+    async function renderDriverStatus() {
+      const lastId = localStorage.getItem("apt-crossdock-last-driver");
+      const [arrivals, messages, history] = await Promise.all([
+        aptCrossdock.loadArrivals(),
+        aptCrossdock.loadMessages(),
+        aptCrossdock.loadHistory()
+      ]);
+      const item = arrivals.find((arrival) => arrival.id === lastId);
+      registrationControls.classList.toggle("hidden", Boolean(item));
+      if (!item) {
+        stopCalledAlert();
+        driverStatus.innerHTML = "";
+        driverMessageActivity.classList.add("hidden");
+        driverMessageList.innerHTML = "";
+        return;
+      }
+      renderDriverActivity(item.id, messages, history);
+
+      const isInCrossdock = item.status === "called" || item.status === "working";
+      const departureApproved = item.status === "departure-approved";
+      const calledMessage = isInCrossdock
+        ? `<strong class="called-message">Proceed to the crossdock entry now.</strong> Called at ${aptCrossdock.formatTime(item.calledAt)}.`
+        : departureApproved
+          ? `<strong class="called-message">Your departure request has been granted.</strong>`
+        : item.status === "complete"
+          ? `<strong>Crossdock work complete.</strong>`
+        : `<strong>Waiting.</strong> Stay parked until the manager calls you forward.`;
+      const arrivalSummary = item.type === "local"
+        ? `${aptCrossdock.escapeHtml(item.label)} / ${aptCrossdock.escapeHtml(item.vehicleType || "")} / ${aptCrossdock.escapeHtml(item.rego || "")}`
+        : `${aptCrossdock.escapeHtml(item.label)} / ${aptCrossdock.escapeHtml(item.rego)}`;
+      const forkliftMessage = item.forkliftOperator
+        ? `<div><strong>Forklift operator:</strong> ${aptCrossdock.escapeHtml(item.forkliftOperator)}</div>`
+        : `<div><strong>Forklift operator:</strong> Awaiting assignment</div>`;
+      const instructionMessage = isInCrossdock && item.entryInstructions
+        ? `<div class="entry-instructions"><strong>Entry instructions:</strong> ${aptCrossdock.escapeHtml(item.entryInstructions)}</div>`
+        : "";
+      const soundControl = soundAlertsEnabled
+        ? `<div class="alert-enabled">Sound alerts enabled</div>`
+        : `<button class="secondary enable-alerts" type="button">Enable Sound Alerts</button>`;
+      const messageControl = `<button class="secondary message-user" type="button">Message</button>`;
+      const pendingLeaveRequest = messages.some((message) =>
+        message.fromId === item.id
+        && ["leave-site", "leave-queue"].includes(message.requestType)
+        && !message.acknowledgedAt
+      );
+      const departureControl = departureApproved
+        ? `<button class="primary close-driver-screen" type="button">Close Screen</button>`
+        : pendingLeaveRequest
+          ? `<button class="secondary" type="button" disabled>Leave Request Sent</button>`
+          : item.status === "waiting"
+            ? `<button class="danger departure-request" data-request-type="leave-queue" type="button">Leave Queue</button>`
+            : `<button class="danger departure-request" data-request-type="leave-site" type="button">Leave Site</button>`;
+      const latestSentMessage = messages
+        .filter((message) => message.fromType === "driver" && message.fromId === item.id)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      const messageReceipt = latestSentMessage
+        ? `<div class="message-receipt ${latestSentMessage.acknowledgedAt ? "is-acknowledged" : ""}">
+            <span class="delivery-tick">&#10003;</span>
+            <span>${latestSentMessage.acknowledgedAt ? "Message acknowledged" : `Message sent to ${aptCrossdock.escapeHtml(latestSentMessage.toLabel || latestSentMessage.toName)}`}</span>
+          </div>`
+        : "";
+
+      driverStatus.innerHTML = `
+        <div class="status-card ${isInCrossdock ? "driver-called" : ""}">
+          <div>${arrivalSummary}</div>
+          ${forkliftMessage}
+          <div>${calledMessage}</div>
+          ${instructionMessage}
+          ${soundControl}
+          ${messageControl}
+          ${departureControl}
+          ${messageReceipt}
+        </div>
+      `;
+
+      const alertKey = `apt-crossdock-alerted-${item.id}`;
+      const alertValue = item.calledAt || "called";
+      if (
+        isInCrossdock
+        && soundAlertsEnabled
+        && audioContext?.state === "running"
+        && localStorage.getItem(alertKey) !== alertValue
+      ) {
+        playCalledAlert();
+        localStorage.setItem(alertKey, alertValue);
+      } else if (!isInCrossdock) {
+        stopCalledAlert();
+      }
+    }
+
+    async function renderDriverMessages() {
+      const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
+      if (!arrivalId || activeDriverMessageId) return;
+      const messages = await aptCrossdock.loadMessages();
+      const message = messages
+        .filter((item) => item.toType === "driver" && item.toName === arrivalId && !item.acknowledgedAt)
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0];
+      if (!message) return;
+      activeDriverMessageId = message.id;
+      $("#incomingDriverMessageTitle").textContent = `Message From ${message.fromName}`;
+      $("#incomingDriverMessageText").textContent = message.text;
+      $("#incomingDriverMessageModal").classList.remove("hidden");
+      aptCrossdock.playMessageAlert();
+    }
+
+    function renderDriverActivity(arrivalId, messages, history) {
+      const linkedHistory = history
+        .filter((entry) => entry.entityId === arrivalId)
+        .map((entry) => ({
+          id: entry.id,
+          createdAt: entry.createdAt,
+          action: entry.action,
+          details: entry.details,
+          actor: entry.actor,
+          sourceMessageId: entry.sourceMessageId
+        }));
+      const linkedMessageIds = new Set(linkedHistory.map((entry) => entry.sourceMessageId).filter(Boolean));
+      const legacyMessages = messages
+        .filter((message) =>
+          !linkedMessageIds.has(message.id)
+          && (
+            (message.fromType === "driver" && message.fromId === arrivalId)
+            || (message.toType === "driver" && message.toName === arrivalId)
+          )
+        )
+        .map((message) => ({
+          id: message.id,
+          createdAt: message.createdAt,
+          action: message.fromType === "driver"
+            ? `Message sent to ${message.toLabel || message.toName}`
+            : `Message received from ${message.fromName}`,
+          details: message.text,
+          actor: message.fromName,
+          message
+        }));
+      const relevant = [...linkedHistory, ...legacyMessages]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      driverMessageActivity.classList.remove("hidden");
+      if (!relevant.length) {
+        driverMessageList.innerHTML = `<div class="empty">No activity recorded yet.</div>`;
+        return;
+      }
+
+      driverMessageList.innerHTML = relevant.map((entry) => {
+        const message = entry.message;
+        const acknowledgement = message
+          ? message.acknowledgedAt
+            ? `<span class="acknowledged">Acknowledged ${aptCrossdock.formatTime(message.acknowledgedAt)}</span>`
+            : `<span>Awaiting acknowledgement</span>`
+          : `<span>${aptCrossdock.escapeHtml(entry.actor || "System")}</span>`;
+        return `
+          <article class="message-item">
+            <div class="message-item-head">
+              <strong>${aptCrossdock.escapeHtml(entry.action)}</strong>
+              <div class="message-meta">${aptCrossdock.formatTime(entry.createdAt)}</div>
+            </div>
+            ${entry.details ? `<p>${aptCrossdock.escapeHtml(entry.details)}</p>` : ""}
+            <div class="message-meta">${acknowledgement}</div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function resetOutsideCarrierForm() {
+      linehaulForm.reset();
+      $("#otherCustomerWrap").classList.add("hidden");
+      $("#otherCustomer").required = false;
+      $("#palletCapacityWrap").classList.add("hidden");
+      $("#palletCapacity").required = false;
+    }
+
+    localTab.addEventListener("click", () => setType("local"));
+    linehaulTab.addEventListener("click", () => setType("linehaul"));
+
+    localForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await armAudio();
+      const driverNumber = $("#driverNumber").value;
+      const profile = localDriverProfiles[driverNumber];
+      const actionsRequired = $("#actionsRequired").value.trim();
+      if (!driverNumber || !profile || !actionsRequired) return;
+      const item = await aptCrossdock.addArrival({
+        type: "local",
+        label: `Driver ${driverNumber}`,
+        driverName: profile.driverName,
+        rego: profile.rego,
+        vehicleType: profile.vehicleType,
+        actionsRequired,
+        phone: profile.phone
+      });
+      localForm.reset();
+      showNotice(`${item.label} has joined the queue. Please wait until the crossdock manager calls you forward.`);
+      renderDriverStatus();
+    });
+
+    linehaulForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const customerSelect = $("#customerName").value;
+      const otherCustomer = $("#otherCustomer").value.trim();
+      const customerName = customerSelect === "Other" ? otherCustomer : customerSelect;
+      const movementType = $("#movementType").value;
+      const vehicleType = $("#vehicleType").value;
+      const palletCapacity = $("#palletCapacity").value;
+      const rego = $("#linehaulRego").value.trim().toUpperCase();
+      const vehicleDescription = $("#vehicleDescription").value.trim();
+      const driverName = $("#outsideDriverName").value.trim();
+      const phone = $("#phoneNumber").value.trim();
+      if (!customerName || !movementType || !vehicleType || !rego || !vehicleDescription || !driverName || !phone) return;
+      if (vehicleType === "Rigid" && !palletCapacity) return;
+      pendingOutsideArrival = {
+        type: "outside",
+        label: customerName,
+        movementType,
+        vehicleType,
+        palletCapacity,
+        rego,
+        vehicleDescription,
+        driverName,
+        phone
+      };
+      $("#inductionAccepted").checked = false;
+      $("#inductionModal").classList.remove("hidden");
+    });
+
+    $("#cancelInduction").addEventListener("click", () => {
+      pendingOutsideArrival = null;
+      $("#inductionModal").classList.add("hidden");
+    });
+
+    $("#inductionForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!pendingOutsideArrival || !$("#inductionAccepted").checked) return;
+      await armAudio();
+      const acceptedAt = new Date().toISOString();
+      const item = await aptCrossdock.addArrival({
+        ...pendingOutsideArrival,
+        inductionAcceptedAt: acceptedAt,
+        inductionVersion: "Outside Carrier Site Rules v1"
+      });
+      pendingOutsideArrival = null;
+      $("#inductionModal").classList.add("hidden");
+      resetOutsideCarrierForm();
+      showNotice(`${item.label} has joined the queue. Please wait until the crossdock manager calls you forward.`);
+      renderDriverStatus();
+    });
+
+    $("#customerName").addEventListener("change", (event) => {
+      const showOther = event.target.value === "Other";
+      $("#otherCustomerWrap").classList.toggle("hidden", !showOther);
+      $("#otherCustomer").required = showOther;
+      if (!showOther) $("#otherCustomer").value = "";
+    });
+
+    $("#vehicleType").addEventListener("change", (event) => {
+      const showCapacity = event.target.value === "Rigid";
+      $("#palletCapacityWrap").classList.toggle("hidden", !showCapacity);
+      $("#palletCapacity").required = showCapacity;
+      if (!showCapacity) $("#palletCapacity").value = "";
+    });
+
+    driverStatus.addEventListener("click", async (event) => {
+      if (event.target.closest(".message-user")) {
+        await aptCrossdock.refreshForkliftOperators();
+        $("#driverMessageRecipient").innerHTML = '<option value="">Select recipient</option><option value="manager:Manager">Manager</option>'
+          + aptCrossdock.forkliftOperators
+            .map((name) => `<option value="operator:${aptCrossdock.escapeHtml(name)}">${aptCrossdock.escapeHtml(name)}</option>`)
+            .join("");
+        $("#driverMessageModal").classList.remove("hidden");
+        return;
+      }
+      const departureButton = event.target.closest(".departure-request");
+      if (departureButton) {
+        departureRequestType = departureButton.dataset.requestType;
+        $("#departureRequestTitle").textContent = departureRequestType === "leave-queue"
+          ? "Request To Leave Queue"
+          : "Request To Leave Site";
+        $("#departureReason").value = "";
+        $("#departureRequestModal").classList.remove("hidden");
+        return;
+      }
+      if (event.target.closest(".close-driver-screen")) {
+        const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
+        if (!arrivalId) return;
+        await aptCrossdock.removeArrival(arrivalId, "Driver");
+        localStorage.removeItem("apt-crossdock-last-driver");
+        notice.classList.remove("show");
+        renderDriverStatus();
+        return;
+      }
+      const button = event.target.closest(".enable-alerts");
+      if (!button) return;
+      button.disabled = true;
+      const enabled = await armAudio(true);
+      if (!enabled) {
+        button.disabled = false;
+        button.textContent = "Sound unavailable - check browser settings";
+        return;
+      }
+      renderDriverStatus();
+    });
+
+    $("#cancelDriverMessage").addEventListener("click", () => $("#driverMessageModal").classList.add("hidden"));
+
+    $("#driverMessageForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
+      const arrivals = await aptCrossdock.loadArrivals();
+      const arrival = arrivals.find((item) => item.id === arrivalId);
+      if (!arrival) return;
+      const [toType, toName] = $("#driverMessageRecipient").value.split(":");
+      await aptCrossdock.sendMessage({
+        fromType: "driver",
+        fromName: arrival.driverName || arrival.label,
+        fromId: arrival.id,
+        toType,
+        toName,
+        toLabel: toName,
+        text: $("#driverMessageText").value.trim()
+      });
+      event.target.reset();
+      $("#driverMessageModal").classList.add("hidden");
+      notice.classList.remove("show");
+      renderDriverStatus();
+    });
+
+    $("#cancelDepartureRequest").addEventListener("click", () => $("#departureRequestModal").classList.add("hidden"));
+
+    $("#departureRequestForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
+      const arrivals = await aptCrossdock.loadArrivals();
+      const arrival = arrivals.find((item) => item.id === arrivalId);
+      if (!arrival) return;
+      await aptCrossdock.sendMessage({
+        fromType: "driver",
+        fromName: arrival.driverName || arrival.label,
+        fromId: arrival.id,
+        toType: "manager",
+        toName: "Manager",
+        toLabel: "Manager",
+        requestType: departureRequestType,
+        arrivalId: arrival.id,
+        vehicleLabel: arrival.label,
+        text: $("#departureReason").value.trim()
+      });
+      event.target.reset();
+      $("#departureRequestModal").classList.add("hidden");
+      renderDriverStatus();
+    });
+
+    $("#acknowledgeDriverMessage").addEventListener("click", async () => {
+      if (!activeDriverMessageId) return;
+      const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
+      const arrivals = await aptCrossdock.loadArrivals();
+      const arrival = arrivals.find((item) => item.id === arrivalId);
+      await aptCrossdock.acknowledgeMessage(activeDriverMessageId, arrival?.driverName || "Driver");
+      activeDriverMessageId = "";
+      $("#incomingDriverMessageModal").classList.add("hidden");
+      renderDriverMessages();
+    });
+
+    driverMessageList.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-driver-message-remove]");
+      if (!button) return;
+      await aptCrossdock.removeMessage(button.dataset.driverMessageRemove);
+      renderDriverStatus();
+    });
+
+    window.addEventListener("storage", renderDriverStatus);
+    setInterval(() => {
+      renderDriverStatus();
+      renderDriverMessages();
+    }, 3000);
+    loadDriverProfiles();
+    renderDriverStatus();
+    renderDriverMessages();
+  </script>
+</body>
+</html>
