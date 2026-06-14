@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>History | All Purpose Transport</title>
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260614-2">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
+        <div>
+          <h1>Crossdock History</h1>
+          <p class="subtitle">Vehicle, task, message, and staff break activity journal</p>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Pages">
+        <a href="driver-checkin.html">Driver Page</a>
+        <a href="manager-queue.html">Manager Page</a>
+        <a href="forklift-operator.html">Forklift Page</a>
+        <a class="active" href="history.html">History</a>
+      </nav>
+    </header>
+
+    <section class="manager-layout">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Activity Journal</h2>
+          <p>Review who performed each action and when it occurred.</p>
+        </div>
+
+        <div class="manager-grid" aria-label="History summary">
+          <div class="metric"><strong id="totalCount">0</strong><span>All Events</span></div>
+          <div class="metric"><strong id="vehicleCount">0</strong><span>Vehicle Events</span></div>
+          <div class="metric"><strong id="taskCount">0</strong><span>Task Events</span></div>
+          <div class="metric"><strong id="staffCount">0</strong><span>Staff Recorded</span></div>
+        </div>
+
+        <div class="history-controls">
+          <div class="segmented" role="tablist" aria-label="History type">
+            <button class="tab active" type="button" data-filter="all" aria-selected="true">All</button>
+            <button class="tab" type="button" data-filter="vehicle" aria-selected="false">Vehicles</button>
+            <button class="tab" type="button" data-filter="task" aria-selected="false">Ad Hoc Tasks</button>
+            <button class="tab" type="button" data-filter="message" aria-selected="false">Messages</button>
+            <button class="tab" type="button" data-filter="break" aria-selected="false">Breaks</button>
+          </div>
+          <input id="historySearch" type="search" placeholder="Search staff, vehicle, task, message, or action" aria-label="Search history">
+        </div>
+
+        <div class="history-list" id="historyList" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="apt-crossdock.js?v=20260614-2"></script>
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const historyList = $("#historyList");
+    const historySearch = $("#historySearch");
+    let activeFilter = "all";
+
+    async function renderHistory() {
+      const [entries, arrivals] = await Promise.all([
+        aptCrossdock.loadHistory(),
+        aptCrossdock.loadArrivals()
+      ]);
+      const arrivalsById = Object.fromEntries(arrivals.map((arrival) => [arrival.id, arrival]));
+      const sorted = [...entries].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const query = historySearch.value.trim().toLowerCase();
+      const filtered = sorted.filter((entry) => {
+        if (activeFilter !== "all" && entry.entityType !== activeFilter) return false;
+        if (!query) return true;
+        return [entry.title, entry.action, entry.actor, entry.details, entry.status]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      });
+
+      renderMetrics(sorted);
+      if (!filtered.length) {
+        historyList.innerHTML = `<div class="empty">No journal entries match this view.</div>`;
+        return;
+      }
+
+      historyList.innerHTML = filtered.map((entry) => `
+        <article class="history-entry">
+          <div class="history-marker ${entry.entityType}"></div>
+          <div class="history-content">
+            <div class="truck-top">
+              <div class="truck-title">
+                <h3>${aptCrossdock.escapeHtml(historyTitle(entry, arrivalsById))}</h3>
+                <span class="badge">${entityLabel(entry.entityType)}</span>
+              </div>
+              <span class="badge">${aptCrossdock.formatTime(entry.createdAt)}</span>
+            </div>
+            <p class="history-action">${aptCrossdock.escapeHtml(entry.action)}</p>
+            <div class="history-actor">By ${aptCrossdock.escapeHtml(entry.actor || "System")}</div>
+            ${entry.details ? `<p class="history-details">${aptCrossdock.escapeHtml(entry.details)}</p>` : ""}
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function historyTitle(entry, arrivalsById) {
+      const arrival = arrivalsById[entry.entityId];
+      if (entry.entityType === "vehicle" && arrival && (arrival.type === "outside" || arrival.type === "linehaul")) {
+        return [arrival.label, arrival.vehicleType, arrival.rego].filter(Boolean).join(" / ");
+      }
+      return entry.title || "Untitled";
+    }
+
+    function entityLabel(type) {
+      if (type === "vehicle") return "Vehicle";
+      if (type === "message") return "Message";
+      if (type === "break") return "Staff Break";
+      return "Ad Hoc Task";
+    }
+
+    function renderMetrics(entries) {
+      $("#totalCount").textContent = entries.length;
+      $("#vehicleCount").textContent = entries.filter((entry) => entry.entityType === "vehicle").length;
+      $("#taskCount").textContent = entries.filter((entry) => entry.entityType === "task").length;
+      $("#staffCount").textContent = new Set(entries.map((entry) => entry.actor).filter(Boolean)).size;
+    }
+
+    document.querySelector(".segmented").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-filter]");
+      if (!button) return;
+      activeFilter = button.dataset.filter;
+      document.querySelectorAll("button[data-filter]").forEach((item) => {
+        const selected = item === button;
+        item.classList.toggle("active", selected);
+        item.setAttribute("aria-selected", String(selected));
+      });
+      renderHistory();
+    });
+
+    historySearch.addEventListener("input", renderHistory);
+    setInterval(renderHistory, 5000);
+    renderHistory();
+  </script>
+</body>
+</html>
