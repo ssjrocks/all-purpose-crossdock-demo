@@ -1,0 +1,11 @@
+# Runtime data generated and edited by the crossdock application
+arrivals.txt
+tasks.txt
+messages.txt
+history.txt
+local-drivers.txt
+forklift-operators.txt
+
+# Local operating system files
+Thumbs.db
+.DS_Store
