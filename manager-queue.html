@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manager Queue | All Purpose Transport</title>
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260614-2">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
+        <div>
+          <h1>Manager Queue</h1>
+          <p class="subtitle">Crossdock waiting trucks and call-forward controls</p>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Pages">
+        <a href="driver-checkin.html">Driver Page</a>
+        <a class="active" href="manager-queue.html">Manager Page</a>
+        <a href="forklift-operator.html">Forklift Page</a>
+        <a href="history.html">History</a>
+      </nav>
+    </header>
+
+    <section class="manager-layout">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Waiting Vehicles</h2>
+          <p>Select a vehicle when it can proceed to the crossdock entry.</p>
+        </div>
+
+        <div class="manager-grid" aria-label="Queue summary">
+          <div class="metric"><strong id="waitingCount">0</strong><span>Waiting</span></div>
+          <div class="metric"><strong id="calledCount">0</strong><span>In Crossdock</span></div>
+          <div class="metric"><strong id="localCount">0</strong><span>Local</span></div>
+          <div class="metric"><strong id="linehaulCount">0</strong><span>Outside Carrier</span></div>
+        </div>
+
+        <div class="queue-tools">
+          <input id="searchQueue" type="search" placeholder="Search driver, customer, phone, rego, or vehicle" aria-label="Search queue">
+          <button class="secondary" id="editLocalDrivers" type="button">Edit Local Driver Details</button>
+          <button class="secondary" id="editForkliftOperators" type="button">Edit Forklift Operators</button>
+          <button class="secondary" id="seedDemo" type="button">Add Demo Arrivals</button>
+          <button class="danger" id="clearQueue" type="button">Clear Queue</button>
+        </div>
+
+        <div class="truck-list" id="truckList" aria-live="polite"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Ad Hoc Forklift Tasks</h2>
+          <p>Create work that is not directly attached to a waiting truck.</p>
+        </div>
+        <div class="queue-tools">
+          <button class="primary" id="createTask" type="button">Create Task</button>
+          <button class="secondary" id="messageForklift" type="button">Message Forklift Operator</button>
+        </div>
+        <div class="task-list" id="taskList"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Message Activity</h2>
+          <p>Sent messages show when the recipient has acknowledged them.</p>
+        </div>
+        <div class="message-list" id="messageList"></div>
+      </div>
+    </section>
+
+    <div class="modal-backdrop hidden" id="taskModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+        <div class="modal-head"><h2 id="taskModalTitle">Create Forklift Task</h2></div>
+        <form id="taskForm">
+          <label for="taskDescription">Task description</label>
+          <textarea id="taskDescription" placeholder="Describe the task to be completed" required></textarea>
+          <label for="taskOperator">Suggested forklift operator</label>
+          <select id="taskOperator"></select>
+          <button class="primary" type="submit">Create Task</button>
+          <button class="secondary" id="cancelTask" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="messageModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="messageModalTitle">
+        <div class="modal-head"><h2 id="messageModalTitle">Message Forklift Operator</h2></div>
+        <form id="messageForm">
+          <label for="messageRecipient">Recipient</label>
+          <select id="messageRecipient" required></select>
+          <label for="messageText">Message</label>
+          <textarea id="messageText" maxlength="240" placeholder="Enter a short message" required></textarea>
+          <button class="primary" type="submit">Send Message</button>
+          <button class="secondary" id="cancelMessage" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="incomingMessageModal">
+      <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="incomingMessageTitle">
+        <div class="modal-head"><h2 id="incomingMessageTitle">Message From Forklift</h2></div>
+        <div class="modal-body">
+          <div class="message-meta" id="incomingMessageFrom"></div>
+          <p id="incomingMessageText"></p>
+        </div>
+        <div class="modal-actions">
+          <button class="primary" id="acknowledgeMessage" type="button">Acknowledge</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="leaveRequestModal">
+      <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="leaveRequestTitle">
+        <div class="modal-head"><h2 id="leaveRequestTitle">Driver Departure Request</h2></div>
+        <div class="modal-body">
+          <div class="message-meta" id="leaveRequestDriver"></div>
+          <p id="leaveRequestReason"></p>
+          <div class="hidden" id="leaveResponseWrap">
+            <label for="leaveResponseText" id="leaveResponseLabel">Response to driver</label>
+            <textarea id="leaveResponseText" maxlength="300" required></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="primary" id="grantLeaveRequest" type="button">Grant Request</button>
+          <button class="danger" id="denyLeaveRequest" type="button">Deny Request</button>
+          <button class="primary hidden" id="sendLeaveResponse" type="button">Send Response</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="breakRequestModal">
+      <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="breakRequestTitle">
+        <div class="modal-head"><h2 id="breakRequestTitle">Break Request</h2></div>
+        <div class="modal-body">
+          <p id="breakRequestSummary"></p>
+          <label for="breakRejectionMessage">Message if rejected</label>
+          <textarea id="breakRejectionMessage" maxlength="240" placeholder="Explain when the operator can take their break"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="primary" id="approveBreak" type="button">Confirm Break</button>
+          <button class="danger" id="rejectBreak" type="button">Reject With Message</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="instructionModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="instructionTitle">
+        <div class="modal-head"><h2 id="instructionTitle">Notify With Instructions</h2></div>
+        <form id="instructionForm">
+          <label for="entryInstructions">Entry instructions</label>
+          <textarea id="entryInstructions" maxlength="300" placeholder="Proceed to bay one on the left hand side" required></textarea>
+          <button class="primary" type="submit">Notify Driver</button>
+          <button class="secondary" id="cancelInstructions" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="driverEditorModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="driverEditorTitle">
+        <div class="modal-head"><h2 id="driverEditorTitle">Local Driver Details</h2></div>
+        <form id="driverEditorForm">
+          <label for="driverProfileSelect">Saved driver</label>
+          <select id="driverProfileSelect"></select>
+          <label for="editDriverNumber">Driver number</label>
+          <input id="editDriverNumber" autocomplete="off" required>
+          <label for="editDriverName">Driver name</label>
+          <input id="editDriverName" autocomplete="name" required>
+          <label for="editDriverPhone">Phone number</label>
+          <input id="editDriverPhone" autocomplete="tel" inputmode="tel" required>
+          <label for="editDriverVehicle">Vehicle type</label>
+          <input id="editDriverVehicle" autocomplete="off" required>
+          <label for="editDriverRego">Registration number</label>
+          <input id="editDriverRego" autocomplete="off" required>
+          <button class="primary" type="submit">Save Driver</button>
+          <button class="danger hidden" id="deleteLocalDriver" type="button">Delete Driver</button>
+          <button class="secondary" id="cancelDriverEditor" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="operatorEditorModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="operatorEditorTitle">
+        <div class="modal-head"><h2 id="operatorEditorTitle">Forklift Operators</h2></div>
+        <form id="operatorEditorForm">
+          <label for="operatorProfileSelect">Saved operator</label>
+          <select id="operatorProfileSelect"></select>
+          <label for="editOperatorName">Operator name</label>
+          <input id="editOperatorName" autocomplete="name" required>
+          <button class="primary" type="submit">Save Operator</button>
+          <button class="danger hidden" id="deleteForkliftOperator" type="button">Delete Operator</button>
+          <button class="secondary" id="cancelOperatorEditor" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script src="apt-crossdock.js?v=20260614-2"></script>
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const truckList = $("#truckList");
+    const searchQueue = $("#searchQueue");
+    const waitingCount = $("#waitingCount");
+    const calledCount = $("#calledCount");
+    const localCount = $("#localCount");
+    const linehaulCount = $("#linehaulCount");
+    const taskList = $("#taskList");
+    const messageList = $("#messageList");
+    let operatorSelectionActive = false;
+    let taskSelectionActive = false;
+    let activeIncomingMessageId = "";
+    let activeLeaveRequestId = "";
+    let activeLeaveArrivalId = "";
+    let activeLeaveVehicleLabel = "";
+    let activeLeaveRequestType = "";
+    let leaveDecision = "";
+    let activeBreakRequestId = "";
+    let instructionArrivalId = "";
+    let localDrivers = [];
+    let selectedDriverNumber = "";
+    let selectedOperatorName = "";
+    let managerMessageTargetType = "operator";
+    let managerMessageTargetName = "";
+    let managerMessageTargetLabel = "";
+
+    function getFilteredArrivals(arrivals) {
+      const query = searchQueue.value.trim().toLowerCase();
+      const sorted = aptCrossdock.sortArrivals(arrivals)
+        .filter((item) => !["complete", "departure-approved"].includes(item.status));
+      if (!query) return sorted;
+      return sorted.filter((item) => {
+        return [
+          item.label,
+          item.driverName,
+          item.rego,
+          item.phone,
+          item.type,
+          item.status,
+          item.forkliftOperator,
+          item.actionsRequired,
+          item.movementType,
+          item.vehicleType,
+          item.palletCapacity,
+          item.vehicleDescription
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      });
+    }
+
+    function renderMetrics(arrivals) {
+      waitingCount.textContent = arrivals.filter((item) => item.status === "waiting").length;
+      calledCount.textContent = arrivals.filter((item) => item.status === "called" || item.status === "working").length;
+      const active = arrivals.filter((item) => !["complete", "departure-approved"].includes(item.status));
+      localCount.textContent = active.filter((item) => item.type === "local").length;
+      linehaulCount.textContent = active.filter((item) => item.type === "linehaul" || item.type === "outside").length;
+    }
+
+    async function renderQueue(force = false) {
+      if (operatorSelectionActive && !force) return;
+      const allArrivals = await aptCrossdock.loadArrivals();
+      const arrivals = getFilteredArrivals(allArrivals);
+      renderMetrics(allArrivals);
+
+      if (!arrivals.length) {
+        truckList.innerHTML = `<div class="empty">No vehicles match the current queue view.</div>`;
+        return;
+      }
+
+      truckList.innerHTML = arrivals.map((item) => {
+        const isCalled = item.status === "called" || item.status === "working";
+        const isComplete = item.status === "complete";
+        const phone = item.phone || "";
+        const safePhone = aptCrossdock.cleanPhone(phone);
+        const phoneLink = phone ? `<a class="secondary" href="tel:${safePhone}">Call Driver</a>` : "";
+        const smsLink = phone ? `<a class="secondary" href="sms:${safePhone}?body=All%20Purpose%20Transport:%20please%20proceed%20to%20the%20crossdock%20entry.">SMS Driver</a>` : "";
+        const callButton = isCalled || isComplete
+          ? `<button class="secondary" type="button" data-action="waiting" data-id="${item.id}">Return to Waiting</button>`
+          : `<button class="primary" type="button" data-action="call" data-id="${item.id}">Notify: Proceed to Entry</button>`;
+        const instructionButton = !isCalled && !isComplete
+          ? `<button class="secondary" type="button" data-action="instructions" data-id="${item.id}">Notify With Instructions</button>`
+          : "";
+        const messageDriverButton = `<button class="secondary" type="button" data-action="message-driver" data-id="${item.id}" data-label="${aptCrossdock.escapeHtml(item.label)}">Message Driver</button>`;
+
+        return `
+          <article class="truck ${isCalled ? "called" : ""}">
+            <div class="truck-top">
+              <div class="truck-title">
+                <h3>${aptCrossdock.escapeHtml(item.label)}</h3>
+                <span class="badge">${item.type === "local" ? "Local" : "Outside Carrier"}</span>
+                <span class="badge ${statusClass(item.status)}">${statusLabel(item.status)}</span>
+              </div>
+              <span class="badge">Arrived ${aptCrossdock.formatTime(item.arrivedAt)}</span>
+            </div>
+
+            <div class="details">
+              ${renderDetails(item, phone)}
+            </div>
+
+            <div class="actions">
+              ${renderOperatorSelect(item)}
+              ${callButton}
+              ${instructionButton}
+              ${messageDriverButton}
+              ${phoneLink}
+              ${smsLink}
+              <button class="danger" type="button" data-action="remove" data-id="${item.id}">Remove</button>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderDetails(item, phone) {
+      const details = [
+        ["Driver Name", item.driverName || "Not supplied"],
+        ["Forklift", item.forkliftOperator || "Not assigned"],
+        ["Notified By", notifiedLabel(item)],
+        ["Entry Instructions", item.entryInstructions || "Standard entry call"],
+        ["Site Induction", item.type === "local" ? "Internal driver" : item.inductionAcceptedAt ? `Accepted ${aptCrossdock.formatTime(item.inductionAcceptedAt)}` : "Not recorded"],
+        ["Phone", phone || "Not supplied"],
+        ["Called Time", aptCrossdock.formatTime(item.calledAt)]
+      ];
+
+      if (item.type === "local") {
+        details.unshift(
+          ["Registration", item.rego || "Not supplied"],
+          ["Vehicle Type", item.vehicleType || "Not supplied"],
+          ["Actions Required", item.actionsRequired || "Not supplied"]
+        );
+      } else {
+        details.splice(
+          0,
+          0,
+          ["Registration", item.rego],
+          ["Movement", item.movementType || "Not supplied"],
+          ["Vehicle Type", vehicleTypeLabel(item)],
+          ["Description", item.vehicleDescription || "Not supplied"]
+        );
+      }
+
+      return details.map(([label, value]) => `
+        <div class="detail"><span>${label}</span><b>${aptCrossdock.escapeHtml(value)}</b></div>
+      `).join("");
+    }
+
+    function vehicleTypeLabel(item) {
+      if (item.vehicleType === "Rigid" && item.palletCapacity) {
+        return `${item.vehicleType} / ${item.palletCapacity} pallet spaces`;
+      }
+      return item.vehicleType || "Not supplied";
+    }
+
+    function notifiedLabel(item) {
+      if (!item.notifiedBy) return "Not called yet";
+      return item.notifiedAt
+        ? `${item.notifiedBy} / ${aptCrossdock.formatTime(item.notifiedAt)}`
+        : item.notifiedBy;
+    }
+
+    function renderOperatorSelect(item) {
+      const options = ['<option value="">Assign forklift operator</option>']
+        .concat(aptCrossdock.forkliftOperators.map((name) => {
+          const selected = item.forkliftOperator === name ? " selected" : "";
+          return `<option${selected}>${aptCrossdock.escapeHtml(name)}</option>`;
+        }))
+        .join("");
+
+      return `
+        <select class="operator-select" data-operator-for="${item.id}" aria-label="Preferred forklift operator">
+          ${options}
+        </select>
+      `;
+    }
+
+    function statusLabel(status) {
+      if (status === "called") return "Called In";
+      if (status === "working") return "Working";
+      if (status === "complete") return "Complete";
+      return "Waiting";
+    }
+
+    function statusClass(status) {
+      if (status === "called" || status === "working" || status === "complete") return "called";
+      return "waiting";
+    }
+
+    function operatorOptions(selected = "") {
+      return ['<option value="">Anyone available</option>']
+        .concat(aptCrossdock.forkliftOperators.map((name) => {
+          return `<option${selected === name ? " selected" : ""}>${aptCrossdock.escapeHtml(name)}</option>`;
+        }))
+        .join("");
+    }
+
+    async function renderTasks(force = false) {
+      if (taskSelectionActive && !force) return;
+      const tasks = await aptCrossdock.loadTasks();
+      const sorted = [...tasks]
+        .filter((task) => task.taskType !== "break" || !["rejected", "complete"].includes(task.status))
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      showBreakRequest(tasks);
+      if (!sorted.length) {
+        taskList.innerHTML = `<div class="empty">No ad hoc tasks have been created.</div>`;
+        return;
+      }
+
+      taskList.innerHTML = sorted.map((task) => task.taskType === "break" ? renderBreakTask(task) : `
+        <article class="task-item ${task.status === "working" ? "working" : ""}">
+          <div class="truck-top">
+            <div class="truck-title">
+              <strong>Task</strong>
+              <span class="badge ${task.status === "open" ? "waiting" : "called"}">${taskStatusLabel(task.status)}</span>
+            </div>
+            <span class="badge">${aptCrossdock.formatTime(task.createdAt)}</span>
+          </div>
+          <p class="task-description">${aptCrossdock.escapeHtml(task.description)}</p>
+          <div class="details">
+            <div class="detail"><span>Suggested</span><b>${aptCrossdock.escapeHtml(task.suggestedOperator || "Anyone available")}</b></div>
+            <div class="detail"><span>Working Operator</span><b>${aptCrossdock.escapeHtml(task.activeOperator || "Not started")}</b></div>
+          </div>
+          <div class="actions">
+            <select class="operator-select" data-task-operator="${task.id}" aria-label="Suggested task operator">
+              ${operatorOptions(task.suggestedOperator)}
+            </select>
+            ${task.status !== "complete" ? `<button class="secondary" data-task-action="complete" data-id="${task.id}" type="button">Mark Complete</button>` : ""}
+            <button class="danger" data-task-action="remove" data-id="${task.id}" type="button">Remove</button>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function renderBreakTask(task) {
+      const remaining = breakRemaining(task);
+      return `
+        <article class="task-item break-task ${task.status === "working" ? "working" : ""}">
+          <div class="truck-top">
+            <div class="truck-title">
+              <strong>Staff Break / ${aptCrossdock.escapeHtml(task.operatorName)}</strong>
+              <span class="badge ${task.status === "requested" ? "waiting" : "called"}">${task.status === "requested" ? "Awaiting Approval" : "On Break"}</span>
+            </div>
+            <span class="badge">${task.breakMinutes} mins</span>
+          </div>
+          <p class="task-description">${task.status === "requested" ? "Break requested" : `Break approved${remaining ? ` / ${remaining}` : ""}`}</p>
+          <div class="details">
+            <div class="detail"><span>Operator</span><b>${aptCrossdock.escapeHtml(task.operatorName)}</b></div>
+            <div class="detail"><span>Requested</span><b>${aptCrossdock.formatTime(task.requestedAt || task.createdAt)}</b></div>
+          </div>
+        </article>
+      `;
+    }
+
+    function breakRemaining(task) {
+      if (!task.breakStartedAt || task.status !== "working") return "";
+      const end = new Date(task.breakStartedAt).getTime() + Number(task.breakMinutes) * 60000;
+      const minutes = Math.max(0, Math.ceil((end - Date.now()) / 60000));
+      return `${minutes} min remaining`;
+    }
+
+    function showBreakRequest(tasks) {
+      if (activeBreakRequestId) return;
+      const request = tasks
+        .filter((task) => task.taskType === "break" && task.status === "requested")
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0];
+      if (!request) return;
+      activeBreakRequestId = request.id;
+      $("#breakRequestSummary").textContent = `${request.operatorName} has requested a ${request.breakMinutes} minute break.`;
+      $("#breakRejectionMessage").value = "";
+      $("#breakRequestModal").classList.remove("hidden");
+    }
+
+    function taskStatusLabel(status) {
+      if (status === "working") return "Working";
+      if (status === "complete") return "Complete";
+      return "Open";
+    }
+
+    async function renderMessages() {
+      const messages = await aptCrossdock.loadMessages();
+      const relevant = messages
+        .filter((message) => message.fromType === "manager" || message.toType === "manager")
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 20);
+      if (!relevant.length) {
+        messageList.innerHTML = `<div class="empty">No messages yet.</div>`;
+      } else {
+        messageList.innerHTML = relevant.map((message) => {
+          const direction = message.fromType === "manager"
+            ? `To ${message.toLabel || message.toName}`
+            : `From ${message.fromName}`;
+          const acknowledgement = message.fromType === "manager"
+            ? message.acknowledgedAt
+              ? `<span class="acknowledged">Acknowledged ${aptCrossdock.formatTime(message.acknowledgedAt)}</span>`
+              : `<span>Awaiting acknowledgement</span>`
+            : message.acknowledgedAt
+              ? `<span class="acknowledged">Acknowledged</span>`
+              : `<span>Not acknowledged</span>`;
+          return `
+            <article class="message-item">
+              <div class="message-item-head">
+                <div class="message-meta">${aptCrossdock.escapeHtml(direction)} / ${aptCrossdock.formatTime(message.createdAt)}</div>
+                ${message.acknowledgedAt ? `<button class="danger compact" type="button" data-message-remove="${message.id}">Remove</button>` : ""}
+              </div>
+              <p>${aptCrossdock.escapeHtml(message.text)}</p>
+              <div class="message-meta">${acknowledgement}</div>
+            </article>
+          `;
+        }).join("");
+      }
+      showLeaveRequest(messages);
+      showIncomingManagerMessage(messages);
+    }
+
+    function showLeaveRequest(messages) {
+      if (activeLeaveRequestId) return;
+      const request = messages
+        .filter((item) =>
+          item.toType === "manager"
+          && ["leave-site", "leave-queue"].includes(item.requestType)
+          && !item.acknowledgedAt
+        )
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0];
+      if (!request) return;
+      activeLeaveRequestId = request.id;
+      activeLeaveArrivalId = request.arrivalId;
+      activeLeaveVehicleLabel = request.vehicleLabel || request.fromName;
+      activeLeaveRequestType = request.requestType;
+      leaveDecision = "";
+      $("#leaveRequestTitle").textContent = request.requestType === "leave-queue"
+        ? "Driver Request To Leave Queue"
+        : "Driver Request To Leave Site";
+      $("#leaveRequestDriver").textContent = `${request.fromName} / ${activeLeaveVehicleLabel}`;
+      $("#leaveRequestReason").textContent = request.text;
+      $("#leaveResponseWrap").classList.add("hidden");
+      $("#sendLeaveResponse").classList.add("hidden");
+      $("#grantLeaveRequest").classList.remove("hidden");
+      $("#denyLeaveRequest").classList.remove("hidden");
+      $("#leaveRequestModal").classList.remove("hidden");
+      aptCrossdock.playMessageAlert();
+    }
+
+    function showIncomingManagerMessage(messages) {
+      if (activeIncomingMessageId || activeLeaveRequestId) return;
+      const message = messages
+        .filter((item) => item.toType === "manager" && !item.requestType && !item.acknowledgedAt)
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0];
+      if (!message) return;
+      activeIncomingMessageId = message.id;
+      $("#incomingMessageFrom").textContent = `From ${message.fromName}`;
+      $("#incomingMessageText").textContent = message.text;
+      $("#incomingMessageModal").classList.remove("hidden");
+      aptCrossdock.playMessageAlert();
+    }
+
+    searchQueue.addEventListener("input", renderQueue);
+
+    truckList.addEventListener("focusin", (event) => {
+      if (event.target.matches("select[data-operator-for]")) {
+        operatorSelectionActive = true;
+      }
+    });
+
+    truckList.addEventListener("focusout", (event) => {
+      if (!event.target.matches("select[data-operator-for]")) return;
+      setTimeout(() => {
+        operatorSelectionActive = Boolean(
+          document.activeElement?.matches("select[data-operator-for]")
+        );
+        if (!operatorSelectionActive) renderQueue(true);
+      }, 0);
+    });
+
+    truckList.addEventListener("change", async (event) => {
+      const select = event.target.closest("select[data-operator-for]");
+      if (!select) return;
+      select.disabled = true;
+      await aptCrossdock.assignForkliftOperator(select.dataset.operatorFor, select.value, "Manager");
+      select.disabled = false;
+    });
+
+    truckList.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const id = button.dataset.id;
+      if (button.dataset.action === "call") {
+        await aptCrossdock.setArrivalStatus(id, "called", {
+          notifiedBy: "Manager",
+          notifiedAt: new Date().toISOString(),
+          entryInstructions: ""
+        });
+      }
+      if (button.dataset.action === "instructions") {
+        instructionArrivalId = id;
+        $("#entryInstructions").value = "";
+        $("#instructionModal").classList.remove("hidden");
+        return;
+      }
+      if (button.dataset.action === "message-driver") {
+        managerMessageTargetType = "driver";
+        managerMessageTargetName = id;
+        managerMessageTargetLabel = button.dataset.label;
+        $("#messageModalTitle").textContent = `Message ${managerMessageTargetLabel}`;
+        $("#messageRecipient").innerHTML = `<option value="${aptCrossdock.escapeHtml(id)}">${aptCrossdock.escapeHtml(managerMessageTargetLabel)}</option>`;
+        $("#messageModal").classList.remove("hidden");
+        return;
+      }
+      if (button.dataset.action === "waiting") {
+        await aptCrossdock.setArrivalStatus(id, "waiting", {
+          notifiedBy: "",
+          notifiedAt: null,
+          entryInstructions: "",
+          actedBy: "Manager"
+        });
+      }
+      if (button.dataset.action === "remove") await aptCrossdock.removeArrival(id);
+      renderQueue(true);
+    });
+
+    $("#seedDemo").addEventListener("click", async () => {
+      await aptCrossdock.seedDemoArrivals();
+      renderQueue(true);
+    });
+
+    $("#clearQueue").addEventListener("click", async () => {
+      await aptCrossdock.saveArrivals([]);
+      renderQueue(true);
+    });
+
+    async function openDriverEditor() {
+      localDrivers = await aptCrossdock.loadLocalDrivers();
+      $("#driverProfileSelect").innerHTML = '<option value="new">Create new driver</option>'
+        + localDrivers
+          .sort((a, b) => String(a.driverNumber).localeCompare(String(b.driverNumber), undefined, { numeric: true }))
+          .map((driver) => `<option value="${aptCrossdock.escapeHtml(driver.driverNumber)}">Driver ${aptCrossdock.escapeHtml(driver.driverNumber)}</option>`)
+          .join("");
+      selectDriverProfile("new");
+      $("#driverEditorModal").classList.remove("hidden");
+    }
+
+    function selectDriverProfile(driverNumber) {
+      selectedDriverNumber = driverNumber === "new" ? "" : driverNumber;
+      const driver = localDrivers.find((item) => item.driverNumber === selectedDriverNumber);
+      $("#editDriverNumber").value = driver?.driverNumber || "";
+      $("#editDriverName").value = driver?.driverName || "";
+      $("#editDriverPhone").value = driver?.phone || "";
+      $("#editDriverVehicle").value = driver?.vehicleType || "";
+      $("#editDriverRego").value = driver?.rego || "";
+      $("#deleteLocalDriver").classList.toggle("hidden", !driver);
+    }
+
+    $("#editLocalDrivers").addEventListener("click", openDriverEditor);
+    $("#driverProfileSelect").addEventListener("change", (event) => selectDriverProfile(event.target.value));
+    $("#cancelDriverEditor").addEventListener("click", () => $("#driverEditorModal").classList.add("hidden"));
+
+    $("#driverEditorForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const driver = {
+        driverNumber: $("#editDriverNumber").value.trim(),
+        driverName: $("#editDriverName").value.trim(),
+        phone: $("#editDriverPhone").value.trim(),
+        vehicleType: $("#editDriverVehicle").value.trim(),
+        rego: $("#editDriverRego").value.trim().toUpperCase()
+      };
+      if (selectedDriverNumber) {
+        await aptCrossdock.updateLocalDriver(selectedDriverNumber, driver);
+      } else {
+        await aptCrossdock.createLocalDriver(driver);
+      }
+      $("#driverEditorModal").classList.add("hidden");
+    });
+
+    $("#deleteLocalDriver").addEventListener("click", async () => {
+      if (!selectedDriverNumber) return;
+      await aptCrossdock.removeLocalDriver(selectedDriverNumber);
+      await openDriverEditor();
+    });
+
+    async function openOperatorEditor() {
+      await aptCrossdock.refreshForkliftOperators();
+      $("#operatorProfileSelect").innerHTML = '<option value="new">Create new operator</option>'
+        + aptCrossdock.forkliftOperators
+          .map((name) => `<option value="${aptCrossdock.escapeHtml(name)}">${aptCrossdock.escapeHtml(name)}</option>`)
+          .join("");
+      selectOperatorProfile("new");
+      $("#operatorEditorModal").classList.remove("hidden");
+    }
+
+    function selectOperatorProfile(name) {
+      selectedOperatorName = name === "new" ? "" : name;
+      $("#editOperatorName").value = selectedOperatorName;
+      $("#deleteForkliftOperator").classList.toggle("hidden", !selectedOperatorName);
+    }
+
+    $("#editForkliftOperators").addEventListener("click", openOperatorEditor);
+    $("#operatorProfileSelect").addEventListener("change", (event) => selectOperatorProfile(event.target.value));
+    $("#cancelOperatorEditor").addEventListener("click", () => $("#operatorEditorModal").classList.add("hidden"));
+
+    $("#operatorEditorForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const name = $("#editOperatorName").value.trim();
+      if (selectedOperatorName) {
+        await aptCrossdock.updateForkliftOperator(selectedOperatorName, name);
+      } else {
+        await aptCrossdock.createForkliftOperator(name);
+      }
+      await aptCrossdock.refreshForkliftOperators();
+      $("#operatorEditorModal").classList.add("hidden");
+      renderQueue(true);
+      renderTasks(true);
+    });
+
+    $("#deleteForkliftOperator").addEventListener("click", async () => {
+      if (!selectedOperatorName) return;
+      await aptCrossdock.removeForkliftOperator(selectedOperatorName);
+      await openOperatorEditor();
+    });
+
+    $("#createTask").addEventListener("click", () => {
+      $("#taskOperator").innerHTML = operatorOptions();
+      $("#taskModal").classList.remove("hidden");
+    });
+
+    $("#cancelTask").addEventListener("click", () => $("#taskModal").classList.add("hidden"));
+
+    $("#cancelInstructions").addEventListener("click", () => {
+      instructionArrivalId = "";
+      $("#instructionModal").classList.add("hidden");
+    });
+
+    $("#instructionForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await aptCrossdock.setArrivalStatus(instructionArrivalId, "called", {
+        notifiedBy: "Manager",
+        notifiedAt: new Date().toISOString(),
+        entryInstructions: $("#entryInstructions").value.trim()
+      });
+      instructionArrivalId = "";
+      event.target.reset();
+      $("#instructionModal").classList.add("hidden");
+      renderQueue(true);
+    });
+
+    $("#taskForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await aptCrossdock.createTask({
+        description: $("#taskDescription").value.trim(),
+        suggestedOperator: $("#taskOperator").value,
+        createdBy: "Manager"
+      });
+      event.target.reset();
+      $("#taskModal").classList.add("hidden");
+      renderTasks();
+    });
+
+    taskList.addEventListener("change", async (event) => {
+      const select = event.target.closest("select[data-task-operator]");
+      if (!select) return;
+      await aptCrossdock.updateTask(select.dataset.taskOperator, {
+        suggestedOperator: select.value,
+        actedBy: "Manager"
+      });
+    });
+
+    taskList.addEventListener("focusin", (event) => {
+      if (event.target.matches("select[data-task-operator]")) taskSelectionActive = true;
+    });
+
+    taskList.addEventListener("focusout", (event) => {
+      if (!event.target.matches("select[data-task-operator]")) return;
+      setTimeout(() => {
+        taskSelectionActive = Boolean(
+          document.activeElement?.matches("select[data-task-operator]")
+        );
+        if (!taskSelectionActive) renderTasks(true);
+      }, 0);
+    });
+
+    taskList.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-task-action]");
+      if (!button) return;
+      if (button.dataset.taskAction === "complete") {
+        await aptCrossdock.updateTask(button.dataset.id, {
+          status: "complete",
+          completedAt: new Date().toISOString(),
+          actedBy: "Manager"
+        });
+      }
+      if (button.dataset.taskAction === "remove") await aptCrossdock.removeTask(button.dataset.id);
+      renderTasks(true);
+    });
+
+    $("#messageForklift").addEventListener("click", () => {
+      managerMessageTargetType = "operator";
+      managerMessageTargetName = "";
+      managerMessageTargetLabel = "";
+      $("#messageModalTitle").textContent = "Message Forklift Operator";
+      $("#messageRecipient").innerHTML = '<option value="">Select operator</option>'
+        + aptCrossdock.forkliftOperators.map((name) => `<option>${aptCrossdock.escapeHtml(name)}</option>`).join("");
+      $("#messageModal").classList.remove("hidden");
+    });
+
+    $("#cancelMessage").addEventListener("click", () => $("#messageModal").classList.add("hidden"));
+
+    $("#messageForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const selectedRecipient = $("#messageRecipient").value;
+      await aptCrossdock.sendMessage({
+        fromType: "manager",
+        fromName: "Manager",
+        toType: managerMessageTargetType,
+        toName: managerMessageTargetType === "driver" ? managerMessageTargetName : selectedRecipient,
+        toLabel: managerMessageTargetType === "driver" ? managerMessageTargetLabel : selectedRecipient,
+        text: $("#messageText").value.trim()
+      });
+      event.target.reset();
+      $("#messageModal").classList.add("hidden");
+      renderMessages();
+    });
+
+    $("#acknowledgeMessage").addEventListener("click", async () => {
+      if (!activeIncomingMessageId) return;
+      await aptCrossdock.acknowledgeMessage(activeIncomingMessageId, "Manager");
+      activeIncomingMessageId = "";
+      $("#incomingMessageModal").classList.add("hidden");
+      renderMessages();
+    });
+
+    function prepareLeaveResponse(decision) {
+      leaveDecision = decision;
+      $("#leaveResponseLabel").textContent = decision === "granted"
+        ? "Message to driver when granting"
+        : "Reason for denying";
+      $("#leaveResponseText").placeholder = decision === "granted"
+        ? "Optional message; a standard friendly response will be used if left blank"
+        : "Explain why the request cannot be granted";
+      $("#leaveResponseText").value = "";
+      $("#leaveResponseWrap").classList.remove("hidden");
+      $("#sendLeaveResponse").textContent = decision === "granted" ? "Grant Request" : "Deny Request";
+      $("#sendLeaveResponse").classList.remove("hidden");
+      $("#grantLeaveRequest").classList.add("hidden");
+      $("#denyLeaveRequest").classList.add("hidden");
+      $("#leaveResponseText").focus();
+    }
+
+    $("#grantLeaveRequest").addEventListener("click", () => prepareLeaveResponse("granted"));
+    $("#denyLeaveRequest").addEventListener("click", () => prepareLeaveResponse("denied"));
+
+    $("#sendLeaveResponse").addEventListener("click", async () => {
+      if (!activeLeaveRequestId) return;
+      const response = $("#leaveResponseText").value.trim()
+        || (leaveDecision === "granted" ? "Your request is granted, have a nice day." : "");
+      if (!response && leaveDecision === "denied") {
+        $("#leaveResponseText").focus();
+        return;
+      }
+      await aptCrossdock.acknowledgeMessage(activeLeaveRequestId, "Manager");
+      await aptCrossdock.sendMessage({
+        fromType: "manager",
+        fromName: "Manager",
+        toType: "driver",
+        toName: activeLeaveArrivalId,
+        toLabel: activeLeaveVehicleLabel,
+        requestType: "departure-response",
+        departureDecision: leaveDecision,
+        departureRequestType: activeLeaveRequestType,
+        text: response
+      });
+      if (leaveDecision === "granted") {
+        await aptCrossdock.setArrivalStatus(activeLeaveArrivalId, "departure-approved", {
+          actedBy: "Manager"
+        });
+      }
+      activeLeaveRequestId = "";
+      activeLeaveArrivalId = "";
+      activeLeaveVehicleLabel = "";
+      activeLeaveRequestType = "";
+      leaveDecision = "";
+      $("#leaveRequestModal").classList.add("hidden");
+      renderQueue(true);
+      renderMessages();
+    });
+
+    $("#approveBreak").addEventListener("click", async () => {
+      if (!activeBreakRequestId) return;
+      await aptCrossdock.updateTask(activeBreakRequestId, {
+        status: "working",
+        breakStartedAt: new Date().toISOString(),
+        actedBy: "Manager"
+      });
+      activeBreakRequestId = "";
+      $("#breakRequestModal").classList.add("hidden");
+      renderTasks(true);
+    });
+
+    $("#rejectBreak").addEventListener("click", async () => {
+      if (!activeBreakRequestId) return;
+      const message = $("#breakRejectionMessage").value.trim();
+      if (!message) {
+        $("#breakRejectionMessage").focus();
+        return;
+      }
+      const tasks = await aptCrossdock.loadTasks();
+      const request = tasks.find((task) => task.id === activeBreakRequestId);
+      await aptCrossdock.updateTask(activeBreakRequestId, {
+        status: "rejected",
+        rejectionMessage: message,
+        actedBy: "Manager"
+      });
+      if (request) {
+        await aptCrossdock.sendMessage({
+          fromType: "manager",
+          fromName: "Manager",
+          toType: "operator",
+          toName: request.operatorName,
+          text: `Break request declined: ${message}`
+        });
+      }
+      activeBreakRequestId = "";
+      $("#breakRequestModal").classList.add("hidden");
+      renderTasks(true);
+      renderMessages();
+    });
+
+    messageList.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-message-remove]");
+      if (!button) return;
+      await aptCrossdock.removeMessage(button.dataset.messageRemove);
+      renderMessages();
+    });
+
+    window.addEventListener("storage", renderQueue);
+    setInterval(() => {
+      renderQueue();
+      renderTasks();
+      renderMessages();
+    }, 3000);
+    async function initialiseManagerPage() {
+      await aptCrossdock.refreshForkliftOperators();
+      renderQueue();
+      renderTasks();
+      renderMessages();
+    }
+    initialiseManagerPage();
+  </script>
+</body>
+</html>
