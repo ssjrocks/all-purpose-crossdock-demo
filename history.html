@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>History | All Purpose Transport</title>
-  <link rel="stylesheet" href="apt-crossdock.css?v=20260614-2">
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-1">
 </head>
 <body>
   <main class="shell">
@@ -17,14 +17,15 @@
         </div>
       </div>
       <nav class="nav" aria-label="Pages">
-        <a href="driver-checkin.html">Driver Page</a>
         <a href="manager-queue.html">Manager Page</a>
         <a href="forklift-operator.html">Forklift Page</a>
         <a class="active" href="history.html">History</a>
+        <a href="system-configuration.html">System Configuration</a>
+        <button class="secondary" id="historyLogout" type="button">Log Out</button>
       </nav>
     </header>
 
-    <section class="manager-layout">
+    <section class="manager-layout hidden" id="historyPanel">
       <div class="panel">
         <div class="panel-head">
           <h2>Activity Journal</h2>
@@ -54,7 +55,7 @@
     </section>
   </main>
 
-  <script src="apt-crossdock.js?v=20260614-2"></script>
+  <script src="apt-crossdock.js?v=20260615-1"></script>
   <script>
     const $ = (selector) => document.querySelector(selector);
     const historyList = $("#historyList");
@@ -138,8 +139,22 @@
     });
 
     historySearch.addEventListener("input", renderHistory);
-    setInterval(renderHistory, 5000);
-    renderHistory();
+    $("#historyLogout").addEventListener("click", async () => {
+      await aptCrossdock.logout();
+      location.href = "manager-queue.html";
+    });
+
+    async function initialiseHistoryPage() {
+      const user = await aptCrossdock.currentUser();
+      if (!user || user.role !== "manager") {
+        location.href = "manager-queue.html";
+        return;
+      }
+      $("#historyPanel").classList.remove("hidden");
+      renderHistory();
+      setInterval(renderHistory, 5000);
+    }
+    initialiseHistoryPage();
   </script>
 </body>
 </html>
