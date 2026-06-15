@@ -151,6 +151,25 @@
       </div>
     </div>
 
+    <div class="modal-backdrop hidden" id="completeVehicleModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="completeVehicleTitle">
+        <div class="modal-head"><h2 id="completeVehicleTitle">Complete Vehicle Work</h2></div>
+        <form id="completeVehicleForm">
+          <p>Confirm the actual pallet movement before closing this vehicle.</p>
+          <label for="actualPalletsIn">Actual pallets in / unloaded</label>
+          <input id="actualPalletsIn" type="number" min="0" step="1" inputmode="numeric" required>
+          <label for="actualPalletsOut">Actual pallets out / loaded</label>
+          <input id="actualPalletsOut" type="number" min="0" step="1" inputmode="numeric" required>
+          <label class="check-row" for="confirmVehicleDeparture">
+            <input id="confirmVehicleDeparture" type="checkbox" required>
+            <span>I confirm crossdock work is complete and the driver is leaving site.</span>
+          </label>
+          <button class="primary" type="submit">Complete Vehicle</button>
+          <button class="secondary" id="cancelCompleteVehicle" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
+
     <div class="modal-backdrop hidden" id="changePasswordModal">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
         <div class="modal-head"><h2 id="changePasswordTitle">Create A New Password</h2></div>
@@ -187,6 +206,7 @@
     let currentOperator = "";
     let activeIncomingMessageId = "";
     let instructionArrivalId = "";
+    let completionArrivalId = "";
 
     function showWorkQueue(operator) {
       currentOperator = operator;
@@ -527,12 +547,43 @@
         $("#instructionModal").classList.remove("hidden");
         return;
       }
+      if (button.dataset.action === "complete") {
+        const arrivals = await aptCrossdock.loadArrivals();
+        const arrival = arrivals.find((item) => item.id === button.dataset.id);
+        if (!arrival) return;
+        completionArrivalId = arrival.id;
+        $("#actualPalletsIn").value = Number(arrival.actualDropoffCount ?? arrival.dropoffCount ?? 0);
+        $("#actualPalletsOut").value = Number(arrival.actualPickupCount ?? arrival.pickupCount ?? 0);
+        $("#confirmVehicleDeparture").checked = false;
+        $("#completeVehicleModal").classList.remove("hidden");
+        return;
+      }
       if (button.dataset.action === "working") {
         await aptCrossdock.assignForkliftOperator(button.dataset.id, currentOperator, currentOperator);
       }
       await aptCrossdock.setArrivalStatus(button.dataset.id, button.dataset.action, {
         actedBy: currentOperator
       });
+      renderQueue();
+    });
+
+    $("#cancelCompleteVehicle").addEventListener("click", () => {
+      completionArrivalId = "";
+      $("#completeVehicleModal").classList.add("hidden");
+    });
+
+    $("#completeVehicleForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!completionArrivalId || !$("#confirmVehicleDeparture").checked) return;
+      await aptCrossdock.setArrivalStatus(completionArrivalId, "complete", {
+        actualDropoffCount: Number($("#actualPalletsIn").value || 0),
+        actualPickupCount: Number($("#actualPalletsOut").value || 0),
+        departureConfirmedAt: new Date().toISOString(),
+        actedBy: currentOperator
+      });
+      completionArrivalId = "";
+      event.target.reset();
+      $("#completeVehicleModal").classList.add("hidden");
       renderQueue();
     });
 

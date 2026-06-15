@@ -34,7 +34,6 @@
         </div>
 
         <div class="manager-grid" aria-label="History summary">
-          <div class="metric"><strong id="totalCount">0</strong><span>All Events</span></div>
           <div class="metric"><strong id="vehicleCount">0</strong><span>Vehicle Events</span></div>
           <div class="metric"><strong id="taskCount">0</strong><span>Task Events</span></div>
           <div class="metric"><strong id="staffCount">0</strong><span>Staff Recorded</span></div>
@@ -121,7 +120,6 @@
     }
 
     function renderMetrics(entries) {
-      $("#totalCount").textContent = entries.length;
       $("#vehicleCount").textContent = entries.filter((entry) => entry.entityType === "vehicle").length;
       $("#taskCount").textContent = entries.filter((entry) => entry.entityType === "task").length;
       $("#staffCount").textContent = new Set(entries.map((entry) => entry.actor).filter(Boolean)).size;

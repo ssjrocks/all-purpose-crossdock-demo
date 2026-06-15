@@ -190,8 +190,10 @@ async function buildStatistics() {
   const vehicles = arrivals
     .filter((item) => completedIds.has(item.id))
     .sort((a, b) => new Date(b.completedAt || b.arrivedAt) - new Date(a.completedAt || a.arrivedAt));
-  const palletIn = vehicles.reduce((sum, item) => sum + Number(item.dropoffCount || 0), 0);
-  const palletOut = vehicles.reduce((sum, item) => sum + Number(item.pickupCount || 0), 0);
+  const palletIn = vehicles.reduce((sum, item) =>
+    sum + Number(item.actualDropoffCount ?? item.dropoffCount ?? 0), 0);
+  const palletOut = vehicles.reduce((sum, item) =>
+    sum + Number(item.actualPickupCount ?? item.pickupCount ?? 0), 0);
   const now = new Date();
   const activeOperatorNames = new Set(operatorSessions
     .filter((record) =>
@@ -255,8 +257,10 @@ async function buildStatistics() {
       name,
       vehiclesWorked: Math.max(workedVehicles.length, vehicleHistoryCount),
       tasksCompleted: completedTasks.length,
-      palletsUnloaded: workedVehicles.reduce((sum, item) => sum + Number(item.dropoffCount || 0), 0),
-      palletsLoaded: workedVehicles.reduce((sum, item) => sum + Number(item.pickupCount || 0), 0),
+      palletsUnloaded: workedVehicles.reduce((sum, item) =>
+        sum + Number(item.actualDropoffCount ?? item.dropoffCount ?? 0), 0),
+      palletsLoaded: workedVehicles.reduce((sum, item) =>
+        sum + Number(item.actualPickupCount ?? item.pickupCount ?? 0), 0),
       vehicleWorkMinutes: Math.round(vehicleWorkMinutes),
       taskWorkMinutes: Math.round(taskWorkMinutes),
       workMinutes: Math.round(vehicleWorkMinutes + taskWorkMinutes),
@@ -786,6 +790,15 @@ async function handleApi(req, res, urlPath) {
     if (Object.prototype.hasOwnProperty.call(body, "entryInstructions")) {
       item.entryInstructions = body.entryInstructions || "";
     }
+    if (Object.prototype.hasOwnProperty.call(body, "actualDropoffCount")) {
+      item.actualDropoffCount = Math.max(0, Number(body.actualDropoffCount) || 0);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "actualPickupCount")) {
+      item.actualPickupCount = Math.max(0, Number(body.actualPickupCount) || 0);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "departureConfirmedAt")) {
+      item.departureConfirmedAt = body.departureConfirmedAt || null;
+    }
     await writeArrivals(arrivals);
     if (body.status === "called") {
       await addHistoryEntry({
@@ -814,7 +827,11 @@ async function handleApi(req, res, urlPath) {
         title: vehicleHistoryTitle(item),
         action: "Vehicle work completed",
         actor: body.actedBy || item.forkliftOperator || "Forklift operator",
-        details: item.rego || item.actionsRequired || ""
+        details: [
+          `Pallets in: ${Number(item.actualDropoffCount ?? item.dropoffCount ?? 0)}`,
+          `Pallets out: ${Number(item.actualPickupCount ?? item.pickupCount ?? 0)}`,
+          item.departureConfirmedAt ? "Driver departure confirmed" : ""
+        ].filter(Boolean).join(" / ")
       });
     } else if (body.status === "departure-approved") {
       await addHistoryEntry({

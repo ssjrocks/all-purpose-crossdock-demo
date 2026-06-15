@@ -161,8 +161,8 @@
               <td>${aptCrossdock.formatTime(vehicle.completedAt || vehicle.arrivedAt)}</td>
               <td><strong>${aptCrossdock.escapeHtml(vehicleLabel(vehicle))}</strong></td>
               <td>${aptCrossdock.escapeHtml(vehicle.movementType || (vehicle.type === "local" ? "Local" : "Not recorded"))}</td>
-              <td>${Number(vehicle.dropoffCount || 0)}</td>
-              <td>${Number(vehicle.pickupCount || 0)}</td>
+              <td>${Number(vehicle.actualDropoffCount ?? vehicle.dropoffCount ?? 0)}</td>
+              <td>${Number(vehicle.actualPickupCount ?? vehicle.pickupCount ?? 0)}</td>
               <td>${aptCrossdock.escapeHtml(vehicle.forkliftOperator || "Not recorded")}</td>
               <td>${durationLabel((new Date(vehicle.workStartedAt || vehicle.completedAt) - new Date(vehicle.arrivedAt)) / 60000)}</td>
               <td>${durationLabel((new Date(vehicle.completedAt) - new Date(vehicle.workStartedAt)) / 60000)}</td>
