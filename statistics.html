@@ -55,9 +55,6 @@
                 <th>Pallets Unloaded</th>
                 <th>Pallets Loaded</th>
                 <th>Tasks</th>
-                <th>Work Time</th>
-                <th>Break Time</th>
-                <th>Idle Time</th>
               </tr>
             </thead>
             <tbody id="operatorStatistics"></tbody>
@@ -90,18 +87,19 @@
 
       <div class="panel">
         <div class="panel-head">
-          <h2>Operator Task Time</h2>
-          <p>Time recorded between starting and completing ad hoc forklift tasks.</p>
+          <h2>Operator Time Allocation</h2>
+          <p>Logged-in time divided across vehicle work, ad hoc tasks, approved breaks, and available time.</p>
         </div>
         <div class="data-table-wrap">
           <table class="data-table">
             <thead>
               <tr>
                 <th>Operator</th>
-                <th>Tasks Completed</th>
-                <th>Task Time</th>
                 <th>Vehicle Time</th>
-                <th>Total Work Time</th>
+                <th>Ad Hoc Task Time</th>
+                <th>Break Time</th>
+                <th>Available / Idle</th>
+                <th>Total Logged In</th>
               </tr>
             </thead>
             <tbody id="operatorTaskStatistics"></tbody>
@@ -141,20 +139,18 @@
               <td>${operator.palletsUnloaded}</td>
               <td>${operator.palletsLoaded}</td>
               <td>${operator.tasksCompleted}</td>
-              <td>${durationLabel(operator.workMinutes)}</td>
-              <td>${durationLabel(operator.breakMinutes)}</td>
-              <td>${durationLabel(operator.idleMinutes)}</td>
             </tr>
           `).join("")
-        : '<tr><td colspan="8">No forklift operator statistics are available yet.</td></tr>';
+        : '<tr><td colspan="5">No forklift operator statistics are available yet.</td></tr>';
       $("#operatorTaskStatistics").innerHTML = statistics.operators.length
         ? statistics.operators.map((operator) => `
             <tr>
               <td><strong>${aptCrossdock.escapeHtml(operator.name)}</strong></td>
-              <td>${operator.tasksCompleted}</td>
-              <td>${durationLabel(operator.taskWorkMinutes)}</td>
               <td>${durationLabel(operator.vehicleWorkMinutes)}</td>
-              <td>${durationLabel(operator.workMinutes)}</td>
+              <td>${durationLabel(operator.taskWorkMinutes)}</td>
+              <td>${durationLabel(operator.breakMinutes)}</td>
+              <td>${durationLabel(operator.idleMinutes)}</td>
+              <td>${durationLabel(operator.loggedInMinutes)}</td>
             </tr>
           `).join("")
         : '<tr><td colspan="5">No operator task-time records are available yet.</td></tr>';
