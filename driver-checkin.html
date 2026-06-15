@@ -200,6 +200,21 @@
         </div>
       </div>
     </div>
+
+    <div class="modal-backdrop hidden" id="loadRestraintModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="loadRestraintTitle">
+        <div class="modal-head"><h2 id="loadRestraintTitle">Load Restraint Declaration</h2></div>
+        <form id="loadRestraintForm">
+          <p>Before leaving site, confirm that your vehicle and load are safe for transport.</p>
+          <label class="check-row" for="loadRestraintAccepted">
+            <input id="loadRestraintAccepted" type="checkbox" required>
+            <span>I understand the applicable load-restraint requirements and confirm that the load has been checked, secured, and is safe before departing the site.</span>
+          </label>
+          <button class="primary" type="submit">Confirm And Leave Site</button>
+          <button class="secondary" id="cancelLoadRestraint" type="button">Cancel</button>
+        </form>
+      </div>
+    </div>
   </main>
 
   <script src="apt-crossdock.js?v=20260614-2"></script>
@@ -610,10 +625,8 @@
       if (event.target.closest(".close-driver-screen")) {
         const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
         if (!arrivalId) return;
-        await aptCrossdock.removeArrival(arrivalId, "Driver");
-        localStorage.removeItem("apt-crossdock-last-driver");
-        notice.classList.remove("show");
-        renderDriverStatus();
+        $("#loadRestraintAccepted").checked = false;
+        $("#loadRestraintModal").classList.remove("hidden");
         return;
       }
       const button = event.target.closest(".enable-alerts");
@@ -653,6 +666,26 @@
     });
 
     $("#cancelDepartureRequest").addEventListener("click", () => $("#departureRequestModal").classList.add("hidden"));
+    $("#cancelLoadRestraint").addEventListener("click", () => $("#loadRestraintModal").classList.add("hidden"));
+
+    $("#loadRestraintForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!$("#loadRestraintAccepted").checked) return;
+      const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
+      const arrivals = await aptCrossdock.loadArrivals();
+      const arrival = arrivals.find((item) => item.id === arrivalId);
+      if (!arrival) return;
+      await aptCrossdock.updateArrival(arrival.id, {
+        loadRestraintDeclaredAt: new Date().toISOString(),
+        loadRestraintDeclarationVersion: "Driver load restraint declaration v1",
+        loadRestraintDeclaredBy: arrival.driverName || arrival.label
+      });
+      localStorage.removeItem("apt-crossdock-last-driver");
+      event.target.reset();
+      $("#loadRestraintModal").classList.add("hidden");
+      notice.classList.remove("show");
+      renderDriverStatus();
+    });
 
     $("#departureRequestForm").addEventListener("submit", async (event) => {
       event.preventDefault();

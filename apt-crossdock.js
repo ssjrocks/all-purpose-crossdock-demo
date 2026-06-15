@@ -435,6 +435,7 @@ window.aptCrossdock = {
   seedDemoArrivals,
   setArrivalStatus,
   sortArrivals,
+  updateArrival,
   updateTask,
   updateForkliftOperator,
   updateLocalDriver

@@ -799,8 +799,22 @@ async function handleApi(req, res, urlPath) {
     if (Object.prototype.hasOwnProperty.call(body, "departureConfirmedAt")) {
       item.departureConfirmedAt = body.departureConfirmedAt || null;
     }
+    if (Object.prototype.hasOwnProperty.call(body, "loadRestraintDeclaredAt")) {
+      item.loadRestraintDeclaredAt = body.loadRestraintDeclaredAt || null;
+      item.loadRestraintDeclarationVersion = body.loadRestraintDeclarationVersion || "";
+      item.loadRestraintDeclaredBy = body.loadRestraintDeclaredBy || item.driverName || item.label;
+    }
     await writeArrivals(arrivals);
-    if (body.status === "called") {
+    if (body.loadRestraintDeclaredAt && !previous.loadRestraintDeclaredAt) {
+      await addHistoryEntry({
+        entityType: "vehicle",
+        entityId: item.id,
+        title: vehicleHistoryTitle(item),
+        action: "Driver load restraint declaration confirmed",
+        actor: item.loadRestraintDeclaredBy,
+        details: `${item.loadRestraintDeclarationVersion} / Confirmed ${item.loadRestraintDeclaredAt}`
+      });
+    } else if (body.status === "called") {
       await addHistoryEntry({
         entityType: "vehicle",
         entityId: item.id,
