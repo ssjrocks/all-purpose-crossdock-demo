@@ -17,7 +17,6 @@
         </div>
       </div>
       <nav class="nav" aria-label="Pages">
-        <a href="driver-checkin.html">Driver Page</a>
         <a href="manager-queue.html">Manager Page</a>
         <a class="active" href="forklift-operator.html">Forklift Page</a>
       </nav>
@@ -26,13 +25,16 @@
     <section class="page-grid" id="operatorSelectPanel">
       <div class="panel">
         <div class="panel-head">
-          <h2>Select Operator</h2>
-          <p>Choose your name to view trucks assigned to you.</p>
+          <h2>Forklift Operator Login</h2>
+          <p>Sign in with your operator name and password.</p>
         </div>
         <form id="operatorForm">
-          <label for="operatorName">Forklift operator</label>
-          <select id="operatorName" required></select>
-          <button class="primary" type="submit">Open Work Queue</button>
+          <label for="operatorName">Operator name</label>
+          <input id="operatorName" autocomplete="username" required>
+          <label for="operatorPassword">Password</label>
+          <input id="operatorPassword" type="password" autocomplete="current-password" required>
+          <div class="form-error hidden" id="operatorLoginError"></div>
+          <button class="primary" type="submit">Sign In</button>
         </form>
       </div>
     </section>
@@ -53,7 +55,7 @@
 
         <div class="queue-tools">
           <input id="searchQueue" type="search" placeholder="Search customer, driver, rego, or vehicle" aria-label="Search queue">
-          <button class="secondary" id="changeOperator" type="button">Change Operator</button>
+          <button class="secondary" id="changeOperator" type="button">Log Out</button>
         </div>
 
         <div class="truck-list" id="truckList" aria-live="polite"></div>
@@ -148,6 +150,21 @@
         </form>
       </div>
     </div>
+
+    <div class="modal-backdrop hidden" id="changePasswordModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
+        <div class="modal-head"><h2 id="changePasswordTitle">Create A New Password</h2></div>
+        <form id="changePasswordForm">
+          <p>Your temporary password is your operator name. Choose a private password before opening the work queue.</p>
+          <label for="newOperatorPassword">New password</label>
+          <input id="newOperatorPassword" type="password" autocomplete="new-password" minlength="6" required>
+          <label for="confirmOperatorPassword">Confirm new password</label>
+          <input id="confirmOperatorPassword" type="password" autocomplete="new-password" minlength="6" required>
+          <div class="form-error hidden" id="changePasswordError"></div>
+          <button class="primary" type="submit">Save Password</button>
+        </form>
+      </div>
+    </div>
   </main>
 
   <script src="apt-crossdock.js?v=20260614-2"></script>
@@ -155,6 +172,7 @@
     const $ = (selector) => document.querySelector(selector);
     const operatorForm = $("#operatorForm");
     const operatorName = $("#operatorName");
+    const operatorPassword = $("#operatorPassword");
     const operatorSelectPanel = $("#operatorSelectPanel");
     const workPanel = $("#workPanel");
     const workHeading = $("#workHeading");
@@ -166,19 +184,12 @@
     const completeCount = $("#completeCount");
     const taskList = $("#taskList");
     const messageList = $("#messageList");
-    let currentOperator = localStorage.getItem("apt-crossdock-forklift-operator") || "";
+    let currentOperator = "";
     let activeIncomingMessageId = "";
     let instructionArrivalId = "";
 
-    function populateOperators() {
-      operatorName.innerHTML = '<option value="">Select your name</option>'
-        + aptCrossdock.forkliftOperators.map((name) => `<option>${aptCrossdock.escapeHtml(name)}</option>`).join("");
-      operatorName.value = currentOperator;
-    }
-
     function showWorkQueue(operator) {
       currentOperator = operator;
-      localStorage.setItem("apt-crossdock-forklift-operator", operator);
       workHeading.textContent = `Crossdock Vehicles / ${operator}`;
       operatorSelectPanel.classList.add("hidden");
       workPanel.classList.remove("hidden");
@@ -440,14 +451,50 @@
       aptCrossdock.playMessageAlert();
     }
 
-    operatorForm.addEventListener("submit", (event) => {
+    operatorForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (operatorName.value) showWorkQueue(operatorName.value);
+      $("#operatorLoginError").classList.add("hidden");
+      try {
+        const user = await aptCrossdock.login("operator", operatorName.value, operatorPassword.value);
+        operatorPassword.value = "";
+        currentOperator = user.name;
+        if (user.mustChangePassword) {
+          $("#changePasswordModal").classList.remove("hidden");
+          $("#newOperatorPassword").focus();
+        } else {
+          showWorkQueue(user.name);
+        }
+      } catch {
+        $("#operatorLoginError").textContent = "Incorrect operator name or password.";
+        $("#operatorLoginError").classList.remove("hidden");
+      }
     });
 
-    $("#changeOperator").addEventListener("click", () => {
-      workPanel.classList.add("hidden");
-      operatorSelectPanel.classList.remove("hidden");
+    $("#changeOperator").addEventListener("click", async () => {
+      await aptCrossdock.logout();
+      location.reload();
+    });
+
+    $("#changePasswordForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const password = $("#newOperatorPassword").value;
+      const confirmation = $("#confirmOperatorPassword").value;
+      const error = $("#changePasswordError");
+      error.classList.add("hidden");
+      if (password !== confirmation) {
+        error.textContent = "The passwords do not match.";
+        error.classList.remove("hidden");
+        return;
+      }
+      try {
+        const user = await aptCrossdock.changePassword(password);
+        event.target.reset();
+        $("#changePasswordModal").classList.add("hidden");
+        showWorkQueue(user.name);
+      } catch (requestError) {
+        error.textContent = "Use at least 6 characters and do not reuse your operator name.";
+        error.classList.remove("hidden");
+      }
     });
 
     searchQueue.addEventListener("input", renderQueue);
@@ -621,12 +668,16 @@
 
     async function initialiseForkliftPage() {
       await aptCrossdock.refreshForkliftOperators();
-      if (currentOperator && !aptCrossdock.forkliftOperators.includes(currentOperator)) {
-        currentOperator = "";
-        localStorage.removeItem("apt-crossdock-forklift-operator");
+      const user = await aptCrossdock.currentUser();
+      if (user?.role === "operator" && aptCrossdock.forkliftOperators.includes(user.name)) {
+        currentOperator = user.name;
+        if (user.mustChangePassword) {
+          operatorSelectPanel.classList.add("hidden");
+          $("#changePasswordModal").classList.remove("hidden");
+        } else {
+          showWorkQueue(user.name);
+        }
       }
-      populateOperators();
-      if (currentOperator) showWorkQueue(currentOperator);
     }
     initialiseForkliftPage();
     setInterval(() => {

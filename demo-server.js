@@ -1,6 +1,7 @@
 const http = require("http");
 const fs = require("fs/promises");
 const path = require("path");
+const crypto = require("crypto");
 
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "127.0.0.1";
@@ -11,7 +12,8 @@ const MESSAGES_FILE = path.join(ROOT, "messages.txt");
 const HISTORY_FILE = path.join(ROOT, "history.txt");
 const LOCAL_DRIVERS_FILE = path.join(ROOT, "local-drivers.txt");
 const FORKLIFT_OPERATORS_FILE = path.join(ROOT, "forklift-operators.txt");
-const DEFAULT_FORKLIFT_OPERATORS = ["Alex", "Ben", "Chris", "Sam"].map((name) => ({ name }));
+const DEFAULT_FORKLIFT_OPERATORS = ["Alex", "Ben", "Chris", "Sam"].map(createDefaultOperator);
+const sessions = new Map();
 const DEFAULT_LOCAL_DRIVERS = [
   ["101", "Driver 101", "0400 000 101", "Rigid", "APT101"],
   ["102", "Driver 102", "0400 000 102", "Rigid", "APT102"],
@@ -91,7 +93,65 @@ async function ensureForkliftOperators() {
     await fs.access(FORKLIFT_OPERATORS_FILE);
   } catch {
     await writeCollection(FORKLIFT_OPERATORS_FILE, DEFAULT_FORKLIFT_OPERATORS);
+    return;
   }
+  const operators = await readCollection(FORKLIFT_OPERATORS_FILE);
+  let changed = false;
+  const migrated = operators.map((operator) => {
+    if (operator.passwordHash) return operator;
+    changed = true;
+    return createDefaultOperator(operator.name);
+  });
+  if (changed) await writeCollection(FORKLIFT_OPERATORS_FILE, migrated);
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash?.includes(":")) return false;
+  const [salt, expected] = storedHash.split(":");
+  const actual = crypto.scryptSync(String(password), salt, 64);
+  const expectedBuffer = Buffer.from(expected, "hex");
+  return actual.length === expectedBuffer.length && crypto.timingSafeEqual(actual, expectedBuffer);
+}
+
+function createDefaultOperator(name) {
+  return {
+    name,
+    passwordHash: hashPassword(name),
+    mustChangePassword: true
+  };
+}
+
+function publicOperator(operator) {
+  return {
+    name: operator.name,
+    mustChangePassword: Boolean(operator.mustChangePassword)
+  };
+}
+
+function createSession(user) {
+  const token = crypto.randomBytes(32).toString("hex");
+  sessions.set(token, { ...user, createdAt: Date.now() });
+  return token;
+}
+
+function getSession(req) {
+  const authorization = req.headers.authorization || "";
+  if (!authorization.startsWith("Bearer ")) return null;
+  return sessions.get(authorization.slice(7)) || null;
+}
+
+function requireManager(req, res) {
+  const session = getSession(req);
+  if (!session || session.role !== "manager") {
+    sendJson(res, 401, { error: "Manager login required" });
+    return null;
+  }
+  return session;
 }
 
 function vehicleHistoryTitle(item) {
@@ -140,13 +200,113 @@ function sendText(res, status, text) {
 }
 
 function safeStaticPath(urlPath) {
-  const fileName = urlPath === "/" ? "driver-checkin.html" : decodeURIComponent(urlPath).replace(/^\/+/, "");
+  const fileName = urlPath === "/"
+    ? "driver-checkin.html"
+    : urlPath === "/favicon.ico"
+      ? "apt-logo.jpeg"
+      : decodeURIComponent(urlPath).replace(/^\/+/, "");
   const resolved = path.resolve(ROOT, fileName);
   if (!resolved.startsWith(ROOT)) return null;
   return resolved;
 }
 
 async function handleApi(req, res, urlPath) {
+  if (urlPath === "/api/auth/login" && req.method === "POST") {
+    const body = await readRequestBody(req);
+    const username = String(body.username || "").trim();
+    const password = String(body.password || "");
+    if (body.role === "manager") {
+      if (username.toLowerCase() !== "manager" || password !== "manager") {
+        sendJson(res, 401, { error: "Invalid manager username or password" });
+        return true;
+      }
+      const user = { role: "manager", name: "Manager", mustChangePassword: false };
+      sendJson(res, 200, { token: createSession(user), user });
+      return true;
+    }
+    const operators = await readCollection(FORKLIFT_OPERATORS_FILE);
+    const operator = operators.find((item) => item.name.toLowerCase() === username.toLowerCase());
+    if (!operator || !verifyPassword(password, operator.passwordHash)) {
+      sendJson(res, 401, { error: "Invalid operator name or password" });
+      return true;
+    }
+    const user = { role: "operator", name: operator.name, mustChangePassword: Boolean(operator.mustChangePassword) };
+    sendJson(res, 200, { token: createSession(user), user });
+    return true;
+  }
+
+  if (urlPath === "/api/auth/me" && req.method === "GET") {
+    const session = getSession(req);
+    if (!session) {
+      sendJson(res, 200, { user: null });
+      return true;
+    }
+    sendJson(res, 200, { user: session });
+    return true;
+  }
+
+  if (urlPath === "/api/auth/logout" && req.method === "POST") {
+    const authorization = req.headers.authorization || "";
+    if (authorization.startsWith("Bearer ")) sessions.delete(authorization.slice(7));
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (urlPath === "/api/auth/change-password" && req.method === "POST") {
+    const session = getSession(req);
+    if (!session || session.role !== "operator") {
+      sendJson(res, 401, { error: "Operator login required" });
+      return true;
+    }
+    const body = await readRequestBody(req);
+    const password = String(body.password || "");
+    if (password.length < 6 || password.toLowerCase() === session.name.toLowerCase()) {
+      sendJson(res, 400, { error: "Use at least 6 characters and do not reuse your name" });
+      return true;
+    }
+    const operators = await readCollection(FORKLIFT_OPERATORS_FILE);
+    const operator = operators.find((item) => item.name === session.name);
+    if (!operator) {
+      sendJson(res, 404, { error: "Operator not found" });
+      return true;
+    }
+    operator.passwordHash = hashPassword(password);
+    operator.mustChangePassword = false;
+    session.mustChangePassword = false;
+    await writeCollection(FORKLIFT_OPERATORS_FILE, operators);
+    sendJson(res, 200, { user: session });
+    return true;
+  }
+
+  if (urlPath === "/api/auth/confirm-manager" && req.method === "POST") {
+    if (!requireManager(req, res)) return true;
+    const body = await readRequestBody(req);
+    if (String(body.password || "") !== "manager") {
+      sendJson(res, 401, { error: "Incorrect manager password" });
+      return true;
+    }
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (urlPath === "/api/admin/seed-demo" && req.method === "POST") {
+    if (!requireManager(req, res)) return true;
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (urlPath === "/api/admin/clear-queue" && req.method === "POST") {
+    if (!requireManager(req, res)) return true;
+    const body = await readRequestBody(req);
+    if (String(body.password || "") !== "manager") {
+      sendJson(res, 401, { error: "Incorrect manager password" });
+      return true;
+    }
+    await writeArrivals([]);
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
   if (urlPath === "/api/history" && req.method === "GET") {
     sendJson(res, 200, await readCollection(HISTORY_FILE));
     return true;
@@ -172,7 +332,8 @@ async function handleApi(req, res, urlPath) {
           : FORKLIFT_OPERATORS_FILE;
 
     if (!id && req.method === "GET") {
-      sendJson(res, 200, await readCollection(filePath));
+      const items = await readCollection(filePath);
+      sendJson(res, 200, collectionName === "forklift-operators" ? items.map(publicOperator) : items);
       return true;
     }
 
@@ -184,7 +345,9 @@ async function handleApi(req, res, urlPath) {
     }
 
     if (!id && req.method === "POST") {
-      const item = await readRequestBody(req);
+      if (["local-drivers", "forklift-operators"].includes(collectionName) && !requireManager(req, res)) return true;
+      let item = await readRequestBody(req);
+      if (collectionName === "forklift-operators") item = createDefaultOperator(String(item.name || "").trim());
       const items = await readCollection(filePath);
       items.unshift(item);
       await writeCollection(filePath, items);
@@ -235,11 +398,12 @@ async function handleApi(req, res, urlPath) {
           details
         });
       }
-      sendJson(res, 201, item);
+      sendJson(res, 201, collectionName === "forklift-operators" ? publicOperator(item) : item);
       return true;
     }
 
     if (id && req.method === "PATCH") {
+      if (["local-drivers", "forklift-operators"].includes(collectionName) && !requireManager(req, res)) return true;
       const body = await readRequestBody(req);
       const items = await readCollection(filePath);
       const item = items.find((entry) =>
@@ -254,7 +418,15 @@ async function handleApi(req, res, urlPath) {
         return true;
       }
       const previous = { ...item };
+      if (collectionName === "forklift-operators" && body.resetPassword) {
+        item.passwordHash = hashPassword(item.name);
+        item.mustChangePassword = true;
+        delete body.resetPassword;
+      }
       Object.assign(item, body);
+      if (collectionName === "forklift-operators" && body.name && body.name !== previous.name && item.mustChangePassword) {
+        item.passwordHash = hashPassword(body.name);
+      }
       await writeCollection(filePath, items);
       if (collectionName === "tasks") {
         if (item.taskType === "break") {
@@ -324,11 +496,12 @@ async function handleApi(req, res, urlPath) {
           });
         }
       }
-      sendJson(res, 200, item);
+      sendJson(res, 200, collectionName === "forklift-operators" ? publicOperator(item) : item);
       return true;
     }
 
     if (id && req.method === "DELETE") {
+      if (["local-drivers", "forklift-operators"].includes(collectionName) && !requireManager(req, res)) return true;
       const items = await readCollection(filePath);
       const removed = items.find((entry) =>
         collectionName === "local-drivers"

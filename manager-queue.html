@@ -17,14 +17,32 @@
         </div>
       </div>
       <nav class="nav" aria-label="Pages">
-        <a href="driver-checkin.html">Driver Page</a>
         <a class="active" href="manager-queue.html">Manager Page</a>
         <a href="forklift-operator.html">Forklift Page</a>
         <a href="history.html">History</a>
+        <a href="system-configuration.html">System Configuration</a>
+        <button class="secondary hidden" id="managerLogout" type="button">Log Out</button>
       </nav>
     </header>
 
-    <section class="manager-layout">
+    <section class="page-grid auth-panel" id="managerLoginPanel">
+      <div class="panel auth-card">
+        <div class="panel-head">
+          <h2>Manager Login</h2>
+          <p>Sign in to open the live crossdock queue.</p>
+        </div>
+        <form id="managerLoginForm">
+          <label for="managerUsername">Username</label>
+          <input id="managerUsername" autocomplete="username" value="manager" required>
+          <label for="managerPassword">Password</label>
+          <input id="managerPassword" type="password" autocomplete="current-password" required>
+          <div class="form-error hidden" id="managerLoginError"></div>
+          <button class="primary" type="submit">Sign In</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="manager-layout hidden" id="managerWorkPanel">
       <div class="panel">
         <div class="panel-head">
           <h2>Waiting Vehicles</h2>
@@ -40,10 +58,6 @@
 
         <div class="queue-tools">
           <input id="searchQueue" type="search" placeholder="Search driver, customer, phone, rego, or vehicle" aria-label="Search queue">
-          <button class="secondary" id="editLocalDrivers" type="button">Edit Local Driver Details</button>
-          <button class="secondary" id="editForkliftOperators" type="button">Edit Forklift Operators</button>
-          <button class="secondary" id="seedDemo" type="button">Add Demo Arrivals</button>
-          <button class="danger" id="clearQueue" type="button">Clear Queue</button>
         </div>
 
         <div class="truck-list" id="truckList" aria-live="polite"></div>
@@ -157,43 +171,6 @@
       </div>
     </div>
 
-    <div class="modal-backdrop hidden" id="driverEditorModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="driverEditorTitle">
-        <div class="modal-head"><h2 id="driverEditorTitle">Local Driver Details</h2></div>
-        <form id="driverEditorForm">
-          <label for="driverProfileSelect">Saved driver</label>
-          <select id="driverProfileSelect"></select>
-          <label for="editDriverNumber">Driver number</label>
-          <input id="editDriverNumber" autocomplete="off" required>
-          <label for="editDriverName">Driver name</label>
-          <input id="editDriverName" autocomplete="name" required>
-          <label for="editDriverPhone">Phone number</label>
-          <input id="editDriverPhone" autocomplete="tel" inputmode="tel" required>
-          <label for="editDriverVehicle">Vehicle type</label>
-          <input id="editDriverVehicle" autocomplete="off" required>
-          <label for="editDriverRego">Registration number</label>
-          <input id="editDriverRego" autocomplete="off" required>
-          <button class="primary" type="submit">Save Driver</button>
-          <button class="danger hidden" id="deleteLocalDriver" type="button">Delete Driver</button>
-          <button class="secondary" id="cancelDriverEditor" type="button">Cancel</button>
-        </form>
-      </div>
-    </div>
-
-    <div class="modal-backdrop hidden" id="operatorEditorModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="operatorEditorTitle">
-        <div class="modal-head"><h2 id="operatorEditorTitle">Forklift Operators</h2></div>
-        <form id="operatorEditorForm">
-          <label for="operatorProfileSelect">Saved operator</label>
-          <select id="operatorProfileSelect"></select>
-          <label for="editOperatorName">Operator name</label>
-          <input id="editOperatorName" autocomplete="name" required>
-          <button class="primary" type="submit">Save Operator</button>
-          <button class="danger hidden" id="deleteForkliftOperator" type="button">Delete Operator</button>
-          <button class="secondary" id="cancelOperatorEditor" type="button">Cancel</button>
-        </form>
-      </div>
-    </div>
   </main>
 
   <script src="apt-crossdock.js?v=20260614-2"></script>
@@ -217,12 +194,10 @@
     let leaveDecision = "";
     let activeBreakRequestId = "";
     let instructionArrivalId = "";
-    let localDrivers = [];
-    let selectedDriverNumber = "";
-    let selectedOperatorName = "";
     let managerMessageTargetType = "operator";
     let managerMessageTargetName = "";
     let managerMessageTargetLabel = "";
+    let managerAuthenticated = false;
 
     function getFilteredArrivals(arrivals) {
       const query = searchQueue.value.trim().toLowerCase();
@@ -259,6 +234,7 @@
     }
 
     async function renderQueue(force = false) {
+      if (!managerAuthenticated) return;
       if (operatorSelectionActive && !force) return;
       const allArrivals = await aptCrossdock.loadArrivals();
       const arrivals = getFilteredArrivals(allArrivals);
@@ -396,6 +372,7 @@
     }
 
     async function renderTasks(force = false) {
+      if (!managerAuthenticated) return;
       if (taskSelectionActive && !force) return;
       const tasks = await aptCrossdock.loadTasks();
       const sorted = [...tasks]
@@ -478,6 +455,7 @@
     }
 
     async function renderMessages() {
+      if (!managerAuthenticated) return;
       const messages = await aptCrossdock.loadMessages();
       const relevant = messages
         .filter((message) => message.fromType === "manager" || message.toType === "manager")
@@ -616,105 +594,6 @@
       }
       if (button.dataset.action === "remove") await aptCrossdock.removeArrival(id);
       renderQueue(true);
-    });
-
-    $("#seedDemo").addEventListener("click", async () => {
-      await aptCrossdock.seedDemoArrivals();
-      renderQueue(true);
-    });
-
-    $("#clearQueue").addEventListener("click", async () => {
-      await aptCrossdock.saveArrivals([]);
-      renderQueue(true);
-    });
-
-    async function openDriverEditor() {
-      localDrivers = await aptCrossdock.loadLocalDrivers();
-      $("#driverProfileSelect").innerHTML = '<option value="new">Create new driver</option>'
-        + localDrivers
-          .sort((a, b) => String(a.driverNumber).localeCompare(String(b.driverNumber), undefined, { numeric: true }))
-          .map((driver) => `<option value="${aptCrossdock.escapeHtml(driver.driverNumber)}">Driver ${aptCrossdock.escapeHtml(driver.driverNumber)}</option>`)
-          .join("");
-      selectDriverProfile("new");
-      $("#driverEditorModal").classList.remove("hidden");
-    }
-
-    function selectDriverProfile(driverNumber) {
-      selectedDriverNumber = driverNumber === "new" ? "" : driverNumber;
-      const driver = localDrivers.find((item) => item.driverNumber === selectedDriverNumber);
-      $("#editDriverNumber").value = driver?.driverNumber || "";
-      $("#editDriverName").value = driver?.driverName || "";
-      $("#editDriverPhone").value = driver?.phone || "";
-      $("#editDriverVehicle").value = driver?.vehicleType || "";
-      $("#editDriverRego").value = driver?.rego || "";
-      $("#deleteLocalDriver").classList.toggle("hidden", !driver);
-    }
-
-    $("#editLocalDrivers").addEventListener("click", openDriverEditor);
-    $("#driverProfileSelect").addEventListener("change", (event) => selectDriverProfile(event.target.value));
-    $("#cancelDriverEditor").addEventListener("click", () => $("#driverEditorModal").classList.add("hidden"));
-
-    $("#driverEditorForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const driver = {
-        driverNumber: $("#editDriverNumber").value.trim(),
-        driverName: $("#editDriverName").value.trim(),
-        phone: $("#editDriverPhone").value.trim(),
-        vehicleType: $("#editDriverVehicle").value.trim(),
-        rego: $("#editDriverRego").value.trim().toUpperCase()
-      };
-      if (selectedDriverNumber) {
-        await aptCrossdock.updateLocalDriver(selectedDriverNumber, driver);
-      } else {
-        await aptCrossdock.createLocalDriver(driver);
-      }
-      $("#driverEditorModal").classList.add("hidden");
-    });
-
-    $("#deleteLocalDriver").addEventListener("click", async () => {
-      if (!selectedDriverNumber) return;
-      await aptCrossdock.removeLocalDriver(selectedDriverNumber);
-      await openDriverEditor();
-    });
-
-    async function openOperatorEditor() {
-      await aptCrossdock.refreshForkliftOperators();
-      $("#operatorProfileSelect").innerHTML = '<option value="new">Create new operator</option>'
-        + aptCrossdock.forkliftOperators
-          .map((name) => `<option value="${aptCrossdock.escapeHtml(name)}">${aptCrossdock.escapeHtml(name)}</option>`)
-          .join("");
-      selectOperatorProfile("new");
-      $("#operatorEditorModal").classList.remove("hidden");
-    }
-
-    function selectOperatorProfile(name) {
-      selectedOperatorName = name === "new" ? "" : name;
-      $("#editOperatorName").value = selectedOperatorName;
-      $("#deleteForkliftOperator").classList.toggle("hidden", !selectedOperatorName);
-    }
-
-    $("#editForkliftOperators").addEventListener("click", openOperatorEditor);
-    $("#operatorProfileSelect").addEventListener("change", (event) => selectOperatorProfile(event.target.value));
-    $("#cancelOperatorEditor").addEventListener("click", () => $("#operatorEditorModal").classList.add("hidden"));
-
-    $("#operatorEditorForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const name = $("#editOperatorName").value.trim();
-      if (selectedOperatorName) {
-        await aptCrossdock.updateForkliftOperator(selectedOperatorName, name);
-      } else {
-        await aptCrossdock.createForkliftOperator(name);
-      }
-      await aptCrossdock.refreshForkliftOperators();
-      $("#operatorEditorModal").classList.add("hidden");
-      renderQueue(true);
-      renderTasks(true);
-    });
-
-    $("#deleteForkliftOperator").addEventListener("click", async () => {
-      if (!selectedOperatorName) return;
-      await aptCrossdock.removeForkliftOperator(selectedOperatorName);
-      await openOperatorEditor();
     });
 
     $("#createTask").addEventListener("click", () => {
@@ -937,11 +816,33 @@
       renderMessages();
     }, 3000);
     async function initialiseManagerPage() {
+      const user = await aptCrossdock.currentUser();
+      if (!user || user.role !== "manager") return;
+      managerAuthenticated = true;
+      $("#managerLoginPanel").classList.add("hidden");
+      $("#managerWorkPanel").classList.remove("hidden");
+      $("#managerLogout").classList.remove("hidden");
       await aptCrossdock.refreshForkliftOperators();
       renderQueue();
       renderTasks();
       renderMessages();
     }
+    $("#managerLoginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      $("#managerLoginError").classList.add("hidden");
+      try {
+        await aptCrossdock.login("manager", $("#managerUsername").value, $("#managerPassword").value);
+        $("#managerPassword").value = "";
+        initialiseManagerPage();
+      } catch {
+        $("#managerLoginError").textContent = "Incorrect username or password.";
+        $("#managerLoginError").classList.remove("hidden");
+      }
+    });
+    $("#managerLogout").addEventListener("click", async () => {
+      await aptCrossdock.logout();
+      location.reload();
+    });
     initialiseManagerPage();
   </script>
 </body>

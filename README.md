@@ -28,9 +28,21 @@ Open the following pages on the server computer:
 - Manager queue: `http://localhost:4173/manager-queue.html`
 - Forklift operator: `http://localhost:4173/forklift-operator.html`
 - History: `http://localhost:4173/history.html`
+- System configuration: `http://localhost:4173/system-configuration.html`
 
 For another device on the same network, replace `localhost` with the server
 computer's IPv4 address.
+
+## Demo logins
+
+- Manager username: `manager`
+- Manager password: `manager`
+- Forklift operator username: the operator's saved name
+- Forklift operator temporary password: the same saved name
+
+Forklift operators are required to choose a new password when they first sign in
+with the name-based temporary password. The manager can reset an operator back
+to that temporary password from System Configuration.
 
 ## Data storage
 

@@ -1,6 +1,7 @@
 const API_BASE = "";
 const LAST_DRIVER_KEY = "apt-crossdock-last-driver";
 const FORKLIFT_OPERATORS = ["Alex", "Ben", "Chris", "Sam"];
+const AUTH_TOKEN_KEY = "apt-crossdock-auth-token";
 let notificationAudioContext = null;
 
 async function armNotificationAudio() {
@@ -56,9 +57,11 @@ function createId() {
 }
 
 async function requestJson(url, options = {}) {
+  const token = sessionStorage.getItem(AUTH_TOKEN_KEY);
   const response = await fetch(url, {
     headers: {
       "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {})
     },
     ...options
@@ -69,6 +72,55 @@ async function requestJson(url, options = {}) {
   }
 
   return response.json();
+}
+
+async function login(role, username, password) {
+  const result = await requestJson(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    body: JSON.stringify({ role, username, password })
+  });
+  sessionStorage.setItem(AUTH_TOKEN_KEY, result.token);
+  return result.user;
+}
+
+async function currentUser() {
+  try {
+    const result = await requestJson(`${API_BASE}/api/auth/me`);
+    return result.user;
+  } catch {
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    return null;
+  }
+}
+
+async function logout() {
+  try {
+    await requestJson(`${API_BASE}/api/auth/logout`, { method: "POST", body: "{}" });
+  } finally {
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+}
+
+async function changePassword(password) {
+  const result = await requestJson(`${API_BASE}/api/auth/change-password`, {
+    method: "POST",
+    body: JSON.stringify({ password })
+  });
+  return result.user;
+}
+
+async function confirmManagerPassword(password) {
+  return requestJson(`${API_BASE}/api/auth/confirm-manager`, {
+    method: "POST",
+    body: JSON.stringify({ password })
+  });
+}
+
+async function clearQueue(password) {
+  return requestJson(`${API_BASE}/api/admin/clear-queue`, {
+    method: "POST",
+    body: JSON.stringify({ password })
+  });
 }
 
 async function loadArrivals() {
@@ -261,6 +313,13 @@ async function updateForkliftOperator(currentName, name) {
   });
 }
 
+async function resetForkliftOperatorPassword(name) {
+  return requestJson(`${API_BASE}/api/forklift-operators/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ resetPassword: true })
+  });
+}
+
 async function removeForkliftOperator(name) {
   return requestJson(`${API_BASE}/api/forklift-operators/${encodeURIComponent(name)}`, {
     method: "DELETE"
@@ -332,23 +391,30 @@ window.aptCrossdock = {
   acknowledgeMessage,
   assignForkliftOperator,
   cleanPhone,
+  clearQueue,
+  changePassword,
+  confirmManagerPassword,
   createForkliftOperator,
   createLocalDriver,
   createTask,
   escapeHtml,
   forkliftOperators: FORKLIFT_OPERATORS,
   formatTime,
+  currentUser,
   loadArrivals,
   loadHistory,
   loadLocalDrivers,
   loadMessages,
   loadTasks,
+  login,
+  logout,
   playMessageAlert,
   removeArrival,
   removeForkliftOperator,
   removeLocalDriver,
   removeMessage,
   removeTask,
+  resetForkliftOperatorPassword,
   refreshForkliftOperators,
   saveArrivals,
   sendMessage,

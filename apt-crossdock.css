@@ -801,6 +801,39 @@ textarea:focus {
   display: none !important;
 }
 
+.auth-panel {
+  min-height: min(560px, 68vh);
+  place-items: center;
+}
+
+.auth-card {
+  width: min(100%, 460px);
+}
+
+.auth-card form,
+.config-grid form {
+  padding: 18px;
+}
+
+.form-error {
+  padding: 10px 12px;
+  border: 1px solid #e5a3a3;
+  border-radius: 8px;
+  background: #fff1f1;
+  color: #9b1c1c;
+  font-weight: 700;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.config-wide {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 900px) {
   .topbar {
     align-items: flex-start;
@@ -826,6 +859,14 @@ textarea:focus {
 
   .details {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .config-wide {
+    grid-column: auto;
   }
 }
 
