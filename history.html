@@ -8,6 +8,7 @@
 </head>
 <body>
   <main class="shell">
+    <!-- Manager-only navigation for historical and administrative views. -->
     <header class="topbar">
       <div class="brand">
         <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
@@ -26,6 +27,7 @@
       </nav>
     </header>
 
+    <!-- Filterable journal generated from vehicle, task, message, and break events. -->
     <section class="manager-layout hidden" id="historyPanel">
       <div class="panel">
         <div class="panel-head">
@@ -57,11 +59,13 @@
 
   <script src="apt-crossdock.js?v=20260615-1"></script>
   <script>
+    // Current journal filter and reusable page references.
     const $ = (selector) => document.querySelector(selector);
     const historyList = $("#historyList");
     const historySearch = $("#historySearch");
     let activeFilter = "all";
 
+    // Joins history with active arrivals so outside carriers retain descriptive titles.
     async function renderHistory() {
       const [entries, arrivals] = await Promise.all([
         aptCrossdock.loadHistory(),
@@ -104,6 +108,7 @@
       `).join("");
     }
 
+    // Outside-carrier titles combine customer, vehicle type, and registration.
     function historyTitle(entry, arrivalsById) {
       const arrival = arrivalsById[entry.entityId];
       if (entry.entityType === "vehicle" && arrival && (arrival.type === "outside" || arrival.type === "linehaul")) {
@@ -112,6 +117,7 @@
       return entry.title || "Untitled";
     }
 
+    // Converts internal entity types into readable journal badges.
     function entityLabel(type) {
       if (type === "vehicle") return "Vehicle";
       if (type === "message") return "Message";
@@ -119,12 +125,14 @@
       return "Ad Hoc Task";
     }
 
+    // Summary counts deliberately omit a lifetime "all events" total.
     function renderMetrics(entries) {
       $("#vehicleCount").textContent = entries.filter((entry) => entry.entityType === "vehicle").length;
       $("#taskCount").textContent = entries.filter((entry) => entry.entityType === "task").length;
       $("#staffCount").textContent = new Set(entries.map((entry) => entry.actor).filter(Boolean)).size;
     }
 
+    // Journal type tabs and search both rerender from the same source data.
     document.querySelector(".segmented").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-filter]");
       if (!button) return;
@@ -143,6 +151,7 @@
       location.href = "manager-queue.html";
     });
 
+    // Redirects unauthenticated users before revealing manager history.
     async function initialiseHistoryPage() {
       const user = await aptCrossdock.currentUser();
       if (!user || user.role !== "manager") {

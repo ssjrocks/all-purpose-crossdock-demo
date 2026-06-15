@@ -8,6 +8,7 @@
 </head>
 <body>
   <main class="shell">
+    <!-- Authenticated staff navigation and manager session controls. -->
     <header class="topbar">
       <div class="brand">
         <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
@@ -26,6 +27,7 @@
       </nav>
     </header>
 
+    <!-- The queue remains hidden until a manager session is established. -->
     <section class="page-grid auth-panel" id="managerLoginPanel">
       <div class="panel auth-card">
         <div class="panel-head">
@@ -43,6 +45,7 @@
       </div>
     </section>
 
+    <!-- Live resource overview, vehicle queue, tasks, and message activity. -->
     <section class="manager-layout hidden" id="managerWorkPanel">
       <div class="panel">
         <div class="panel-head">
@@ -99,6 +102,7 @@
       </div>
     </section>
 
+    <!-- Manager action dialogs for tasks, messages, requests, breaks, and entry instructions. -->
     <div class="modal-backdrop hidden" id="taskModal">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
         <div class="modal-head"><h2 id="taskModalTitle">Create Forklift Task</h2></div>
@@ -190,6 +194,7 @@
 
   <script src="apt-crossdock.js?v=20260614-2"></script>
   <script>
+    // Page references and modal state shared by the manager polling/render cycle.
     const $ = (selector) => document.querySelector(selector);
     const truckList = $("#truckList");
     const searchQueue = $("#searchQueue");
@@ -214,6 +219,7 @@
     let managerMessageTargetLabel = "";
     let managerAuthenticated = false;
 
+    // Excludes closed vehicles, preserves oldest-first order, and applies free-text search.
     function getFilteredArrivals(arrivals) {
       const query = searchQueue.value.trim().toLowerCase();
       const sorted = aptCrossdock.sortArrivals(arrivals)
@@ -240,6 +246,7 @@
       });
     }
 
+    // Combines live queue counts with server-calculated operator resource states.
     async function renderMetrics(arrivals) {
       waitingCount.textContent = arrivals.filter((item) => item.status === "waiting").length;
       calledCount.textContent = arrivals.filter((item) => item.status === "called" || item.status === "working").length;
@@ -254,6 +261,7 @@
       $("#idleOperatorCount").textContent = statistics.resources.idle;
     }
 
+    // Rebuilds vehicle cards unless an operator dropdown is actively being used.
     async function renderQueue(force = false) {
       if (!managerAuthenticated) return;
       if (operatorSelectionActive && !force) return;
@@ -310,6 +318,7 @@
       }).join("");
     }
 
+    // Builds the appropriate detail grid for local and outside-carrier vehicles.
     function renderDetails(item, phone) {
       const details = [
         ["Driver Name", item.driverName || "Not supplied"],
@@ -347,6 +356,7 @@
       `).join("");
     }
 
+    // Adds rigid pallet capacity where that extra vehicle detail exists.
     function vehicleTypeLabel(item) {
       if (item.vehicleType === "Rigid" && item.palletCapacity) {
         return `${item.vehicleType} / ${item.palletCapacity} pallet spaces`;
@@ -354,6 +364,7 @@
       return item.vehicleType || "Not supplied";
     }
 
+    // Shows who called the driver and when.
     function notifiedLabel(item) {
       if (!item.notifiedBy) return "Not called yet";
       return item.notifiedAt
@@ -361,6 +372,7 @@
         : item.notifiedBy;
     }
 
+    // Assignment is a preference saved independently of notifying the driver.
     function renderOperatorSelect(item) {
       const options = ['<option value="">Assign forklift operator</option>']
         .concat(aptCrossdock.forkliftOperators.map((name) => {
@@ -376,6 +388,7 @@
       `;
     }
 
+    // Convert stored workflow values into concise card labels and styles.
     function statusLabel(status) {
       if (status === "called") return "Called In";
       if (status === "working") return "Working";
@@ -388,6 +401,7 @@
       return "waiting";
     }
 
+    // Reusable assignment options for vehicle and task controls.
     function operatorOptions(selected = "") {
       return ['<option value="">Anyone available</option>']
         .concat(aptCrossdock.forkliftOperators.map((name) => {
@@ -396,6 +410,7 @@
         .join("");
     }
 
+    // Displays active ad hoc work and approved/requested breaks in chronological order.
     async function renderTasks(force = false) {
       if (!managerAuthenticated) return;
       if (taskSelectionActive && !force) return;
@@ -436,6 +451,7 @@
       `).join("");
     }
 
+    // Break requests are task records with specialised status and timing details.
     function renderBreakTask(task) {
       const remaining = breakRemaining(task);
       return `
@@ -456,6 +472,7 @@
       `;
     }
 
+    // Calculates a display-only countdown from the approved break start time.
     function breakRemaining(task) {
       if (!task.breakStartedAt || task.status !== "working") return "";
       const end = new Date(task.breakStartedAt).getTime() + Number(task.breakMinutes) * 60000;
@@ -463,6 +480,7 @@
       return `${minutes} min remaining`;
     }
 
+    // Surfaces one pending break at a time so requests cannot overlap dialogs.
     function showBreakRequest(tasks) {
       if (activeBreakRequestId) return;
       const request = tasks
@@ -481,6 +499,7 @@
       return "Open";
     }
 
+    // Shows recent manager conversations and opens pending operational alerts.
     async function renderMessages() {
       if (!managerAuthenticated) return;
       const messages = await aptCrossdock.loadMessages();
@@ -518,6 +537,7 @@
       showIncomingManagerMessage(messages);
     }
 
+    // Departure requests receive a dedicated grant/deny workflow and response text.
     function showLeaveRequest(messages) {
       if (activeLeaveRequestId) return;
       const request = messages
@@ -546,6 +566,7 @@
       aptCrossdock.playMessageAlert();
     }
 
+    // Ordinary messages wait behind higher-priority departure requests.
     function showIncomingManagerMessage(messages) {
       if (activeIncomingMessageId || activeLeaveRequestId) return;
       const message = messages
@@ -561,6 +582,7 @@
 
     searchQueue.addEventListener("input", renderQueue);
 
+    // Pause queue refresh while a dropdown is focused so its menu does not collapse.
     truckList.addEventListener("focusin", (event) => {
       if (event.target.matches("select[data-operator-for]")) {
         operatorSelectionActive = true;
@@ -585,6 +607,7 @@
       select.disabled = false;
     });
 
+    // Delegated vehicle commands handle call-forward, instructions, messaging, and removal.
     truckList.addEventListener("click", async (event) => {
       const button = event.target.closest("button[data-action]");
       if (!button) return;
@@ -635,6 +658,7 @@
       $("#instructionModal").classList.add("hidden");
     });
 
+    // Custom entry directions are saved with the call-forward audit fields.
     $("#instructionForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       await aptCrossdock.setArrivalStatus(instructionArrivalId, "called", {
@@ -648,6 +672,7 @@
       renderQueue(true);
     });
 
+    // Manager-created tasks may suggest an operator without reserving the work.
     $("#taskForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       await aptCrossdock.createTask({
@@ -733,6 +758,7 @@
       renderMessages();
     });
 
+    // Configures the same response editor for grant and denial decisions.
     function prepareLeaveResponse(decision) {
       leaveDecision = decision;
       $("#leaveResponseLabel").textContent = decision === "granted"
@@ -753,6 +779,7 @@
     $("#grantLeaveRequest").addEventListener("click", () => prepareLeaveResponse("granted"));
     $("#denyLeaveRequest").addEventListener("click", () => prepareLeaveResponse("denied"));
 
+    // Records the decision, notifies the driver, and closes granted arrivals when appropriate.
     $("#sendLeaveResponse").addEventListener("click", async () => {
       if (!activeLeaveRequestId) return;
       const responseDetail = $("#leaveResponseText").value.trim()
@@ -840,11 +867,13 @@
     });
 
     window.addEventListener("storage", renderQueue);
+    // Refresh live panels frequently while preserving focused selects through the guards above.
     setInterval(() => {
       renderQueue();
       renderTasks();
       renderMessages();
     }, 3000);
+    // Restores an existing manager session or presents the login panel.
     async function initialiseManagerPage() {
       const user = await aptCrossdock.currentUser();
       if (!user || user.role !== "manager") return;

@@ -1,3 +1,4 @@
+// Lightweight Node.js demo server: static pages, JSON APIs, and text-file persistence.
 const http = require("http");
 const fs = require("fs/promises");
 const path = require("path");
@@ -13,6 +14,8 @@ const HISTORY_FILE = path.join(ROOT, "history.txt");
 const LOCAL_DRIVERS_FILE = path.join(ROOT, "local-drivers.txt");
 const FORKLIFT_OPERATORS_FILE = path.join(ROOT, "forklift-operators.txt");
 const OPERATOR_SESSIONS_FILE = path.join(ROOT, "operator-sessions.txt");
+
+// Seed data is only written when its backing file does not already exist.
 const DEFAULT_FORKLIFT_OPERATORS = ["Alex", "Ben", "Chris", "Sam"].map(createDefaultOperator);
 const sessions = new Map();
 const DEFAULT_LOCAL_DRIVERS = [
@@ -39,6 +42,7 @@ const mimeTypes = {
   ".txt": "text/plain; charset=utf-8"
 };
 
+// Arrival storage has dedicated helpers because it is the core live queue.
 async function ensureDataFile() {
   try {
     await fs.access(DATA_FILE);
@@ -62,6 +66,7 @@ async function writeArrivals(arrivals) {
   await fs.writeFile(DATA_FILE, JSON.stringify(arrivals, null, 2), "utf8");
 }
 
+// Generic collection helpers support tasks, messages, history, profiles, and sessions.
 async function readCollection(filePath) {
   try {
     await fs.access(filePath);
@@ -81,6 +86,7 @@ async function writeCollection(filePath, items) {
   await fs.writeFile(filePath, JSON.stringify(items, null, 2), "utf8");
 }
 
+// Ensure manager-editable profile files exist and migrate old operator records to passwords.
 async function ensureLocalDrivers() {
   try {
     await fs.access(LOCAL_DRIVERS_FILE);
@@ -106,6 +112,7 @@ async function ensureForkliftOperators() {
   if (changed) await writeCollection(FORKLIFT_OPERATORS_FILE, migrated);
 }
 
+// Passwords are salted and hashed even in the demo so plaintext credentials are not stored.
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
   return `${salt}:${hash}`;
@@ -119,6 +126,7 @@ function verifyPassword(password, storedHash) {
   return actual.length === expectedBuffer.length && crypto.timingSafeEqual(actual, expectedBuffer);
 }
 
+// New operators initially use their name as a temporary password and must replace it.
 function createDefaultOperator(name) {
   return {
     name,
@@ -127,6 +135,7 @@ function createDefaultOperator(name) {
   };
 }
 
+// Never send password hashes to the browser.
 function publicOperator(operator) {
   return {
     name: operator.name,
@@ -134,12 +143,14 @@ function publicOperator(operator) {
   };
 }
 
+// Sessions are intentionally memory-only; restarting the demo server logs everyone out.
 function createSession(user) {
   const token = crypto.randomBytes(32).toString("hex");
   sessions.set(token, { ...user, createdAt: Date.now() });
   return token;
 }
 
+// Operator session records allow the statistics page to estimate logged-in and idle time.
 async function startOperatorSession(user, token) {
   const records = await readCollection(OPERATOR_SESSIONS_FILE);
   const record = {
@@ -155,6 +166,7 @@ async function startOperatorSession(user, token) {
   if (session) session.operatorSessionId = record.id;
 }
 
+// A heartbeat updates presence; logout closes the same stored session record.
 async function touchOperatorSession(session, close = false) {
   if (!session?.operatorSessionId) return;
   const records = await readCollection(OPERATOR_SESSIONS_FILE);
@@ -165,6 +177,7 @@ async function touchOperatorSession(session, close = false) {
   await writeCollection(OPERATOR_SESSIONS_FILE, records);
 }
 
+// Invalid or reversed timestamps contribute no duration to operational statistics.
 function minutesBetween(start, end) {
   const startTime = new Date(start).getTime();
   const endTime = new Date(end).getTime();
@@ -172,6 +185,7 @@ function minutesBetween(start, end) {
   return (endTime - startTime) / 60000;
 }
 
+// Aggregates queue history, pallet movement, operator work, breaks, presence, and idle time.
 async function buildStatistics() {
   const [arrivals, tasks, history, operators, operatorSessions] = await Promise.all([
     readArrivals(),
@@ -285,6 +299,7 @@ async function buildStatistics() {
   };
 }
 
+// Authentication guards are deliberately separate from route handling for readable API rules.
 function getSession(req) {
   const authorization = req.headers.authorization || "";
   if (!authorization.startsWith("Bearer ")) return null;
@@ -300,6 +315,7 @@ function requireManager(req, res) {
   return session;
 }
 
+// These labels make history entries readable without duplicating display logic in each route.
 function vehicleHistoryTitle(item) {
   if (item.type === "outside" || item.type === "linehaul") {
     return [item.label, item.vehicleType, item.rego].filter(Boolean).join(" / ");
@@ -318,6 +334,7 @@ function messageHistoryEntityId(item) {
   return item.id;
 }
 
+// History is append-only from the user's perspective and newest entries appear first.
 async function addHistoryEntry(entry) {
   const history = await readCollection(HISTORY_FILE);
   history.unshift({
@@ -328,6 +345,7 @@ async function addHistoryEntry(entry) {
   await writeCollection(HISTORY_FILE, history);
 }
 
+// HTTP helpers centralise JSON parsing, response types, and safe static-file resolution.
 async function readRequestBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -356,7 +374,9 @@ function safeStaticPath(urlPath) {
   return resolved;
 }
 
+// Routes are grouped by authentication/admin, generic collections, then live arrivals.
 async function handleApi(req, res, urlPath) {
+  // Login, presence, password changes, and manager confirmation.
   if (urlPath === "/api/auth/login" && req.method === "POST") {
     const body = await readRequestBody(req);
     const username = String(body.username || "").trim();
@@ -452,6 +472,7 @@ async function handleApi(req, res, urlPath) {
     return true;
   }
 
+  // Manager-only administration and reporting endpoints.
   if (urlPath === "/api/admin/seed-demo" && req.method === "POST") {
     if (!requireManager(req, res)) return true;
     sendJson(res, 200, { ok: true });
@@ -488,6 +509,7 @@ async function handleApi(req, res, urlPath) {
     return true;
   }
 
+  // Tasks, messages, driver profiles, and operator profiles use one collection route family.
   const collectionMatch = urlPath.match(/^\/api\/(tasks|messages|local-drivers|forklift-operators)(?:\/([^/]+))?$/);
   if (collectionMatch) {
     const collectionName = collectionMatch[1];
@@ -521,6 +543,7 @@ async function handleApi(req, res, urlPath) {
       items.unshift(item);
       await writeCollection(filePath, items);
       if (collectionName === "tasks") {
+        // Breaks and ordinary tasks use different journal wording and actors.
         if (item.taskType === "break") {
           await addHistoryEntry({
             entityType: "break",
@@ -543,6 +566,7 @@ async function handleApi(req, res, urlPath) {
           });
         }
       } else if (collectionName === "messages") {
+        // Departure requests are messages operationally, but receive specific history labels.
         const departureRequest = ["leave-site", "leave-queue"].includes(item.requestType);
         const departureResponse = item.requestType === "departure-response";
         let action = "Message sent";
@@ -598,6 +622,7 @@ async function handleApi(req, res, urlPath) {
       }
       await writeCollection(filePath, items);
       if (collectionName === "tasks") {
+        // Status changes create a journal of task/break progress for later review.
         if (item.taskType === "break") {
           let action = "Break request updated";
           let details = `${item.breakMinutes} minutes`;
@@ -710,6 +735,7 @@ async function handleApi(req, res, urlPath) {
     }
   }
 
+  // Arrival endpoints represent the active crossdock vehicle queue.
   if (urlPath === "/api/arrivals" && req.method === "GET") {
     sendJson(res, 200, await readArrivals());
     return true;
@@ -743,6 +769,7 @@ async function handleApi(req, res, urlPath) {
           ].join(" / ")
     });
     if (item.inductionAcceptedAt) {
+      // Outside-carrier induction acceptance is retained as a separate safety event.
       await addHistoryEntry({
         entityType: "vehicle",
         entityId: item.id,
@@ -769,6 +796,8 @@ async function handleApi(req, res, urlPath) {
     const previousStatus = item.status;
     const previousOperator = item.forkliftOperator || "";
     const previousLoadRestraintDeclaredAt = item.loadRestraintDeclaredAt || null;
+
+    // Normalise workflow state and stamp the first time each work phase begins.
     if (body.status) {
       const nextStatus = ["waiting", "called", "working", "complete", "departure-approved"].includes(body.status)
         ? body.status
@@ -806,6 +835,8 @@ async function handleApi(req, res, urlPath) {
       item.loadRestraintDeclaredBy = body.loadRestraintDeclaredBy || item.driverName || item.label;
     }
     await writeArrivals(arrivals);
+
+    // Record only the highest-value transition represented by this update.
     if (body.loadRestraintDeclaredAt && !previousLoadRestraintDeclaredAt) {
       await addHistoryEntry({
         entityType: "vehicle",
@@ -908,6 +939,7 @@ async function handleApi(req, res, urlPath) {
   return false;
 }
 
+// Serve API requests and static project files from the same origin.
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -935,6 +967,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Create missing data stores before accepting requests.
 Promise.all([
   ensureDataFile(),
   readCollection(TASKS_FILE),

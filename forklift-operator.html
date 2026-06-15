@@ -8,6 +8,7 @@
 </head>
 <body>
   <main class="shell">
+    <!-- Forklift navigation stays separate from the public driver check-in. -->
     <header class="topbar">
       <div class="brand">
         <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
@@ -22,6 +23,7 @@
       </nav>
     </header>
 
+    <!-- Operator login is replaced by the operational workspace after authentication. -->
     <section class="page-grid" id="operatorSelectPanel">
       <div class="panel">
         <div class="panel-head">
@@ -39,6 +41,7 @@
       </div>
     </section>
 
+    <!-- Shared vehicle queue, team tasks/breaks, and direct message activity. -->
     <section class="manager-layout hidden" id="workPanel">
       <div class="panel">
         <div class="panel-head">
@@ -83,6 +86,7 @@
       </div>
     </section>
 
+    <!-- Operator dialogs for communication, tasks, breaks, vehicle actions, and passwords. -->
     <div class="modal-backdrop hidden" id="messageModal">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="messageModalTitle">
         <div class="modal-head"><h2 id="messageModalTitle">Message User</h2></div>
@@ -188,6 +192,7 @@
 
   <script src="apt-crossdock.js?v=20260614-2"></script>
   <script>
+    // Current operator identity and modal targets for this authenticated browser.
     const $ = (selector) => document.querySelector(selector);
     const operatorForm = $("#operatorForm");
     const operatorName = $("#operatorName");
@@ -208,6 +213,7 @@
     let instructionArrivalId = "";
     let completionArrivalId = "";
 
+    // Opens the workspace and starts all three live renderers for the signed-in operator.
     function showWorkQueue(operator) {
       currentOperator = operator;
       workHeading.textContent = `Crossdock Vehicles / ${operator}`;
@@ -218,6 +224,7 @@
       renderMessages();
     }
 
+    // Operators see every active vehicle; search only narrows the shared view.
     function getFilteredArrivals(arrivals) {
       const query = searchQueue.value.trim().toLowerCase();
       const active = aptCrossdock.sortArrivals(arrivals)
@@ -237,6 +244,7 @@
       ].join(" ").toLowerCase().includes(query));
     }
 
+    // Highlights suggested/active work for this operator without hiding other vehicles.
     async function renderQueue() {
       if (!currentOperator) return;
       const allArrivals = await aptCrossdock.loadArrivals();
@@ -300,6 +308,7 @@
       }).join("");
     }
 
+    // Builds vehicle detail cells while accounting for local and outside-carrier fields.
     function renderDetails(item, phone) {
       const details = [
         ["Driver Name", item.driverName || "Not supplied"],
@@ -335,6 +344,7 @@
       `).join("");
     }
 
+    // Converts stored vehicle metadata into the compact card label.
     function vehicleTypeLabel(item) {
       if (item.type === "local") return "Local delivery vehicle";
       if (item.vehicleType === "Rigid" && item.palletCapacity) {
@@ -343,6 +353,7 @@
       return item.vehicleType || "Not supplied";
     }
 
+    // Retains the identity and time of whoever called the vehicle forward.
     function notifiedLabel(item) {
       if (!item.notifiedBy) return "Not called yet";
       return item.notifiedAt
@@ -350,12 +361,14 @@
         : item.notifiedBy;
     }
 
+    // Maps backend workflow states to operator-facing wording.
     function statusLabel(status) {
       if (status === "called") return "Called In";
       if (status === "working") return "Working";
       return "Waiting";
     }
 
+    // Displays all active team tasks and visually marks those assigned to this operator.
     async function renderTasks() {
       if (!currentOperator) return;
       const tasks = await aptCrossdock.loadTasks();
@@ -399,6 +412,7 @@
       }).join("");
     }
 
+    // Breaks remain visible as active tasks until the requesting operator ends them.
     function renderBreakTask(task) {
       const isOwner = task.operatorName === currentOperator;
       const remaining = breakRemaining(task);
@@ -420,12 +434,14 @@
       `;
     }
 
+    // Produces the current approved-break countdown label.
     function breakRemaining(task) {
       if (!task.breakStartedAt || task.status !== "working") return "";
       const end = new Date(task.breakStartedAt).getTime() + Number(task.breakMinutes) * 60000;
       return `${Math.max(0, Math.ceil((end - Date.now()) / 60000))} min remaining`;
     }
 
+    // Restricts message activity to conversations involving the signed-in operator.
     async function renderMessages() {
       if (!currentOperator) return;
       const messages = await aptCrossdock.loadMessages();
@@ -464,6 +480,7 @@
       showIncomingOperatorMessage(messages);
     }
 
+    // Opens the oldest pending message and plays the shared message alert.
     function showIncomingOperatorMessage(messages) {
       if (activeIncomingMessageId || !currentOperator) return;
       const message = messages
@@ -481,6 +498,7 @@
       aptCrossdock.playMessageAlert();
     }
 
+    // Default-name passwords route through the mandatory first-login password change.
     operatorForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       $("#operatorLoginError").classList.add("hidden");
@@ -529,6 +547,7 @@
 
     searchQueue.addEventListener("input", renderQueue);
 
+    // Delegated vehicle controls allow call-forward, work start, and completion confirmation.
     truckList.addEventListener("click", async (event) => {
       const button = event.target.closest("button[data-action]");
       if (!button) return;
@@ -572,6 +591,7 @@
       $("#completeVehicleModal").classList.add("hidden");
     });
 
+    // Completion stores actual pallet movement and confirms the driver is departing.
     $("#completeVehicleForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!completionArrivalId || !$("#confirmVehicleDeparture").checked) return;
@@ -587,6 +607,7 @@
       renderQueue();
     });
 
+    // Operators can claim/complete tasks and end only their own active break.
     taskList.addEventListener("click", async (event) => {
       const button = event.target.closest("button[data-task-action]");
       if (!button) return;
@@ -615,6 +636,7 @@
       renderTasks();
     });
 
+    // Builds optional suggested-operator choices for newly created tasks.
     function operatorOptions(selected = "") {
       return ['<option value="">Anyone available</option>']
         .concat(aptCrossdock.forkliftOperators.map((name) =>
@@ -640,6 +662,7 @@
       renderTasks();
     });
 
+    // Prevent duplicate break requests while one is pending or underway.
     $("#requestBreak").addEventListener("click", async () => {
       const tasks = await aptCrossdock.loadTasks();
       const existing = tasks.some((task) =>
@@ -674,6 +697,7 @@
       $("#instructionModal").classList.add("hidden");
     });
 
+    // Forklift operators can call a vehicle forward with precise bay directions.
     $("#instructionForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       await aptCrossdock.setArrivalStatus(instructionArrivalId, "called", {
@@ -697,6 +721,7 @@
     });
     $("#cancelMessage").addEventListener("click", () => $("#messageModal").classList.add("hidden"));
 
+    // Operator messages can target the manager or another configured operator.
     $("#messageForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const [toType, toName] = $("#messageRecipient").value.split(":");
@@ -727,6 +752,7 @@
       renderMessages();
     });
 
+    // Restores a valid operator session and enforces any outstanding password reset.
     async function initialiseForkliftPage() {
       await aptCrossdock.refreshForkliftOperators();
       const user = await aptCrossdock.currentUser();
@@ -741,6 +767,7 @@
       }
     }
     initialiseForkliftPage();
+    // Heartbeats power logged-in/idle statistics; faster polling keeps work views current.
     setInterval(() => {
       if (currentOperator) aptCrossdock.heartbeat().catch(() => {});
     }, 60000);

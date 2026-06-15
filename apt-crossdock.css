@@ -1,3 +1,4 @@
+/* Shared design tokens and branded page foundation. */
 :root {
   color-scheme: light;
   --ink: #021130;
@@ -30,6 +31,7 @@ body {
     url("apt-crossdock-bg.png") center / cover fixed;
 }
 
+/* Application shell, header branding, and staff navigation. */
 button,
 input,
 select {
@@ -137,6 +139,7 @@ h1 {
   color: var(--brand-strong);
 }
 
+/* Reusable panels and primary page layouts. */
 .page-grid {
   display: grid;
   grid-template-columns: minmax(300px, 500px);
@@ -177,6 +180,7 @@ h1 {
   line-height: 1.35;
 }
 
+/* Driver check-in tabs and form controls. */
 .tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -277,6 +281,7 @@ a:focus-visible {
   border-color: #ffd0ca;
 }
 
+/* Manager overview metrics, queue filters, and vehicle cards. */
 .manager-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -444,6 +449,7 @@ a:focus-visible {
   flex: 1 1 220px;
 }
 
+/* Empty states, tasks, messages, and departure reason controls. */
 .empty {
   padding: 40px 18px;
   text-align: center;
@@ -540,6 +546,7 @@ a:focus-visible {
   font-weight: 800;
 }
 
+/* History journal filters and timeline entries. */
 .history-controls {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) minmax(240px, 1fr);
@@ -629,6 +636,7 @@ a:focus-visible {
   line-height: 1.4;
 }
 
+/* Shared modal, induction, and confirmation dialog treatments. */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -726,6 +734,7 @@ textarea:focus {
   border-color: var(--brand);
 }
 
+/* Driver status, alerts, activity history, and delivery receipts. */
 .notice {
   display: none;
   margin: 0 18px 16px;
@@ -842,6 +851,7 @@ textarea:focus {
   background: var(--ready);
 }
 
+/* Authentication, configuration, overview, and statistics layouts. */
 .hidden {
   display: none !important;
 }
@@ -927,6 +937,7 @@ textarea:focus {
   background: #f7f9fc;
 }
 
+/* Responsive layout adjustments for tablets and phones. */
 @media (max-width: 900px) {
   .topbar {
     align-items: flex-start;

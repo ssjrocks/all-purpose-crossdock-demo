@@ -8,6 +8,7 @@
 </head>
 <body>
   <main class="shell">
+    <!-- Manager-only reporting navigation. -->
     <header class="topbar">
       <div class="brand">
         <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
@@ -26,6 +27,7 @@
       </nav>
     </header>
 
+    <!-- Throughput totals, operator output, vehicle timing, and time allocation. -->
     <section class="manager-layout hidden" id="statisticsPanel">
       <div class="panel">
         <div class="panel-head">
@@ -112,8 +114,10 @@
 
   <script src="apt-crossdock.js?v=20260615-3"></script>
   <script>
+    // Statistics are calculated by the server; this page formats and presents them.
     const $ = (selector) => document.querySelector(selector);
 
+    // Converts minute totals into compact hour/minute labels.
     function durationLabel(minutes) {
       const rounded = Math.max(0, Math.round(Number(minutes) || 0));
       const hours = Math.floor(rounded / 60);
@@ -121,11 +125,13 @@
       return hours ? `${hours}h ${remainder}m` : `${remainder}m`;
     }
 
+    // Uses the richer outside-carrier identity while keeping local driver labels concise.
     function vehicleLabel(vehicle) {
       if (vehicle.type === "local") return vehicle.label;
       return [vehicle.label, vehicle.vehicleType, vehicle.rego].filter(Boolean).join(" / ");
     }
 
+    // Refreshes every summary and table from one consistent statistics snapshot.
     async function renderStatistics() {
       const statistics = await aptCrossdock.loadStatistics();
       Object.entries(statistics.overview).forEach(([key, value]) => {
@@ -176,6 +182,7 @@
       location.href = "manager-queue.html";
     });
 
+    // Statistics require a manager session and refresh less often than the live queue.
     async function initialiseStatistics() {
       const user = await aptCrossdock.currentUser();
       if (!user || user.role !== "manager") {

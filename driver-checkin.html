@@ -8,6 +8,7 @@
 </head>
 <body>
   <main class="shell">
+    <!-- Driver-only header; operational staff links are intentionally omitted. -->
     <header class="topbar">
       <div class="brand">
         <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
@@ -21,6 +22,7 @@
       </nav>
     </header>
 
+    <!-- Arrival registration is replaced by the live status card after check-in. -->
     <section class="page-grid">
       <div class="panel">
         <div class="panel-head">
@@ -116,6 +118,7 @@
         </form>
         </div>
 
+        <!-- Driver-specific waiting status and chronological activity remain visible while checked in. -->
         <div class="notice" id="notice" role="status"></div>
         <div class="driver-status" id="driverStatus"></div>
         <section class="driver-message-activity hidden" id="driverMessageActivity">
@@ -128,6 +131,7 @@
       </div>
     </section>
 
+    <!-- Driver communication, safety induction, departure, and alert dialogs. -->
     <div class="modal-backdrop hidden" id="driverMessageModal">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="driverMessageTitle">
         <div class="modal-head"><h2 id="driverMessageTitle">Message User</h2></div>
@@ -219,6 +223,7 @@
 
   <script src="apt-crossdock.js?v=20260614-2"></script>
   <script>
+    // Cached page elements and workflow state for the currently checked-in browser.
     const $ = (selector) => document.querySelector(selector);
     const localTab = $("#localTab");
     const linehaulTab = $("#linehaulTab");
@@ -237,6 +242,7 @@
     let departureRequestType = "";
     let pendingOutsideArrival = null;
 
+    // Local profiles supply hidden backend details while drivers select only their number.
     async function loadDriverProfiles() {
       const drivers = await aptCrossdock.loadLocalDrivers();
       localDriverProfiles = Object.fromEntries(drivers.map((driver) => [driver.driverNumber, driver]));
@@ -247,6 +253,7 @@
           .join("");
     }
 
+    // Switches between local-driver and outside-carrier registration forms.
     function setType(type) {
       const isLocal = type === "local";
       localTab.classList.toggle("active", isLocal);
@@ -258,11 +265,13 @@
       notice.classList.remove("show");
     }
 
+    // Displays a short confirmation above the live driver status.
     function showNotice(message) {
       notice.textContent = message;
       notice.classList.add("show");
     }
 
+    // Unlocks Web Audio after a user gesture, which is required on mobile browsers.
     async function armAudio(playConfirmation = false) {
       try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -278,6 +287,7 @@
       }
     }
 
+    // Produces one beep; the call-forward alert schedules six of these.
     function playAlertTone(duration = 0.16) {
       if (!audioContext || audioContext.state !== "running") return;
       const oscillator = audioContext.createOscillator();
@@ -293,6 +303,7 @@
       oscillator.stop(audioContext.currentTime + duration + 0.02);
     }
 
+    // A faster six-beep sequence distinguishes a vehicle call-forward from messages.
     function playCalledAlert() {
       stopCalledAlert();
       [0, 240, 480, 720, 960, 1200].forEach((delay) => {
@@ -301,11 +312,13 @@
       if (navigator.vibrate) navigator.vibrate([180, 70, 180, 70, 180, 70, 180]);
     }
 
+    // Cancels any queued tones when the arrival is no longer in a called state.
     function stopCalledAlert() {
       alertTimers.forEach(clearTimeout);
       alertTimers = [];
     }
 
+    // Rebuilds the waiting screen from server state and handles call/departure transitions.
     async function renderDriverStatus() {
       const lastId = localStorage.getItem("apt-crossdock-last-driver");
       const [arrivals, messages, history] = await Promise.all([
@@ -404,6 +417,7 @@
       }
     }
 
+    // Opens the oldest unacknowledged message addressed to this arrival.
     async function renderDriverMessages() {
       const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
       if (!arrivalId || activeDriverMessageId) return;
@@ -419,6 +433,7 @@
       aptCrossdock.playMessageAlert();
     }
 
+    // Merges journal entries with legacy active messages into one driver-facing event log.
     function renderDriverActivity(arrivalId, messages, history) {
       const linkedHistory = history
         .filter((entry) => entry.entityId === arrivalId)
@@ -478,6 +493,7 @@
       }).join("");
     }
 
+    // Clears conditional outside-carrier fields after a successful induction/check-in.
     function resetOutsideCarrierForm() {
       linehaulForm.reset();
       $("#otherCustomerWrap").classList.add("hidden");
@@ -490,6 +506,7 @@
     localTab.addEventListener("click", () => setType("local"));
     linehaulTab.addEventListener("click", () => setType("linehaul"));
 
+    // Local check-in combines entered work requirements with the selected saved profile.
     localForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       await armAudio();
@@ -515,6 +532,7 @@
       renderDriverStatus();
     });
 
+    // Outside-carrier details are held temporarily until site rules are accepted.
     linehaulForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const customerSelect = $("#customerName").value;
@@ -555,6 +573,7 @@
       $("#inductionModal").classList.add("hidden");
     });
 
+    // Induction acceptance is stamped onto the arrival and separately logged by the server.
     $("#inductionForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!pendingOutsideArrival || !$("#inductionAccepted").checked) return;
@@ -586,6 +605,7 @@
       if (!showCapacity) $("#palletCapacity").value = "";
     });
 
+    // Shows the pallet fields applicable to inbound, outbound, or combined movements.
     function updateMovementFields(movementType) {
       const showDropoff = ["Inbound", "Inbound + Pickup"].includes(movementType);
       const showPickup = ["Outbound", "Inbound + Pickup"].includes(movementType);
@@ -599,6 +619,7 @@
 
     $("#movementType").addEventListener("change", (event) => updateMovementFields(event.target.value));
 
+    // Delegated status-card controls cover messaging, departure, screen closure, and audio.
     driverStatus.addEventListener("click", async (event) => {
       if (event.target.closest(".message-user")) {
         await aptCrossdock.refreshForkliftOperators();
@@ -651,6 +672,7 @@
 
     $("#cancelDriverMessage").addEventListener("click", () => $("#driverMessageModal").classList.add("hidden"));
 
+    // Drivers may message the manager or any configured forklift operator.
     $("#driverMessageForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
@@ -676,6 +698,7 @@
     $("#cancelDepartureRequest").addEventListener("click", () => $("#departureRequestModal").classList.add("hidden"));
     $("#cancelLoadRestraint").addEventListener("click", () => $("#loadRestraintModal").classList.add("hidden"));
 
+    // The declaration must be persisted before this browser forgets the completed arrival.
     $("#loadRestraintForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!$("#loadRestraintAccepted").checked) return;
@@ -702,6 +725,7 @@
       renderDriverStatus();
     });
 
+    // Loading complete closes work directly; other departure reasons require manager approval.
     $("#departureRequestForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
@@ -742,6 +766,7 @@
       renderDriverStatus();
     });
 
+    // Acknowledgement gives the sender delivery feedback and advances to the next message.
     $("#acknowledgeDriverMessage").addEventListener("click", async () => {
       if (!activeDriverMessageId) return;
       const arrivalId = localStorage.getItem("apt-crossdock-last-driver");
@@ -760,6 +785,7 @@
       renderDriverStatus();
     });
 
+    // Polling keeps a driver's phone in sync with staff actions from other devices.
     window.addEventListener("storage", renderDriverStatus);
     setInterval(() => {
       renderDriverStatus();

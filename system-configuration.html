@@ -8,6 +8,7 @@
 </head>
 <body>
   <main class="shell">
+    <!-- Manager administration navigation. -->
     <header class="topbar">
       <div class="brand">
         <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
@@ -25,6 +26,7 @@
       </nav>
     </header>
 
+    <!-- Editable master data plus demo/reset utilities. -->
     <section class="config-grid hidden" id="configurationPanel">
       <div class="panel">
         <div class="panel-head">
@@ -82,6 +84,7 @@
       </div>
     </section>
 
+    <!-- Destructive queue reset requires manager-password confirmation. -->
     <div class="modal-backdrop hidden" id="clearQueueModal">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="clearQueueTitle">
         <div class="modal-head"><h2 id="clearQueueTitle">Confirm Queue Reset</h2></div>
@@ -99,11 +102,13 @@
 
   <script src="apt-crossdock.js?v=20260615-1"></script>
   <script>
+    // Cached profile collections and the records currently open in each editor.
     const $ = (selector) => document.querySelector(selector);
     let localDrivers = [];
     let selectedDriverNumber = "";
     let selectedOperatorName = "";
 
+    // Reloads local-driver master data and optionally preserves the current selection.
     async function loadDrivers(selected = "new") {
       localDrivers = await aptCrossdock.loadLocalDrivers();
       $("#driverProfileSelect").innerHTML = '<option value="new">Create new driver</option>'
@@ -115,6 +120,7 @@
       selectDriver(selected);
     }
 
+    // Populates the editor or clears it for a new driver.
     function selectDriver(driverNumber) {
       selectedDriverNumber = driverNumber === "new" ? "" : driverNumber;
       const driver = localDrivers.find((item) => item.driverNumber === selectedDriverNumber);
@@ -126,6 +132,7 @@
       $("#deleteLocalDriver").classList.toggle("hidden", !driver);
     }
 
+    // Refreshes operator identities used by login and assignment dropdowns.
     async function loadOperators(selected = "new") {
       await aptCrossdock.refreshForkliftOperators();
       $("#operatorProfileSelect").innerHTML = '<option value="new">Create new operator</option>'
@@ -136,6 +143,7 @@
       selectOperator(selected);
     }
 
+    // Toggles edit-only actions such as reset password and delete.
     function selectOperator(name) {
       selectedOperatorName = name === "new" ? "" : name;
       $("#editOperatorName").value = selectedOperatorName;
@@ -147,6 +155,7 @@
     $("#driverProfileSelect").addEventListener("change", (event) => selectDriver(event.target.value));
     $("#operatorProfileSelect").addEventListener("change", (event) => selectOperator(event.target.value));
 
+    // The same form creates a profile or updates the selected driver number.
     $("#driverEditorForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const driver = {
@@ -167,6 +176,7 @@
       await loadDrivers();
     });
 
+    // Operator edits also update the identity available to authentication.
     $("#operatorEditorForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const name = $("#editOperatorName").value.trim();
@@ -181,6 +191,7 @@
       await loadOperators();
     });
 
+    // Resetting restores the temporary name-based password and first-login prompt.
     $("#resetOperatorPassword").addEventListener("click", async () => {
       if (!selectedOperatorName) return;
       await aptCrossdock.resetForkliftOperatorPassword(selectedOperatorName);
@@ -193,6 +204,7 @@
       alert("Demo arrivals added.");
     });
 
+    // Queue reset is intentionally two-step to reduce accidental data loss.
     $("#openClearQueue").addEventListener("click", () => {
       $("#clearQueueForm").reset();
       $("#clearQueueError").classList.add("hidden");
@@ -217,6 +229,7 @@
       location.href = "manager-queue.html";
     });
 
+    // Configuration is hidden unless the current session is a manager.
     async function initialise() {
       const user = await aptCrossdock.currentUser();
       if (!user || user.role !== "manager") {

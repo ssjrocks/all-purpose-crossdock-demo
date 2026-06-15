@@ -1,9 +1,11 @@
+// Shared browser client for authentication, API access, alerts, and crossdock records.
 const API_BASE = "";
 const LAST_DRIVER_KEY = "apt-crossdock-last-driver";
 const FORKLIFT_OPERATORS = ["Alex", "Ben", "Chris", "Sam"];
 const AUTH_TOKEN_KEY = "apt-crossdock-auth-token";
 let notificationAudioContext = null;
 
+// Mobile browsers require a user gesture before Web Audio can play notification tones.
 async function armNotificationAudio() {
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -16,6 +18,7 @@ async function armNotificationAudio() {
   }
 }
 
+// Plays the standard three-tone alert used for new messages across staff and driver pages.
 async function playMessageAlert() {
   if (!(await armNotificationAudio())) return;
   [0, 230, 460].forEach((delay, index) => {
@@ -39,6 +42,7 @@ async function playMessageAlert() {
 document.addEventListener("pointerdown", armNotificationAudio, { once: true });
 document.addEventListener("keydown", armNotificationAudio, { once: true });
 
+// Generates IDs on modern and older browsers, including non-secure local network pages.
 function createId() {
   if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID();
@@ -56,6 +60,7 @@ function createId() {
   return `arrival-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+// Applies the current session token and provides one JSON error boundary for all API calls.
 async function requestJson(url, options = {}) {
   const token = sessionStorage.getItem(AUTH_TOKEN_KEY);
   const response = await fetch(url, {
@@ -74,6 +79,7 @@ async function requestJson(url, options = {}) {
   return response.json();
 }
 
+// Authentication helpers keep credentials out of page-specific scripts.
 async function login(role, username, password) {
   const result = await requestJson(`${API_BASE}/api/auth/login`, {
     method: "POST",
@@ -131,6 +137,7 @@ async function clearQueue(password) {
   });
 }
 
+// Arrival records drive the live vehicle queue and the driver's persistent waiting screen.
 async function loadArrivals() {
   return requestJson(`${API_BASE}/api/arrivals`);
 }
@@ -142,6 +149,7 @@ async function saveArrivals(arrivals) {
   });
 }
 
+// Formats stored ISO dates consistently for the Australian site.
 function formatTime(value) {
   if (!value) return "Not called yet";
   return new Intl.DateTimeFormat("en-AU", {
@@ -152,10 +160,12 @@ function formatTime(value) {
   }).format(new Date(value));
 }
 
+// Removes display formatting before a phone number is used in a tel: or sms: link.
 function cleanPhone(phone) {
   return phone.replace(/[^\d+]/g, "");
 }
 
+// Escapes user-entered values before page scripts insert them into generated HTML.
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -165,6 +175,7 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// Creates a waiting arrival and remembers it so this browser can reopen its driver screen.
 async function addArrival(arrival) {
   const item = {
     id: createId(),
@@ -184,6 +195,7 @@ async function addArrival(arrival) {
   return item;
 }
 
+// Small arrival helpers keep status, assignment, and deletion calls consistent across pages.
 async function updateArrival(id, updates) {
   return requestJson(`${API_BASE}/api/arrivals/${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -206,6 +218,7 @@ async function removeArrival(id, actedBy = "Manager") {
   });
 }
 
+// Ad hoc tasks and break requests share the task collection and differ by taskType.
 async function loadTasks() {
   return requestJson(`${API_BASE}/api/tasks`);
 }
@@ -240,6 +253,7 @@ async function removeTask(id) {
   });
 }
 
+// Messages remain active until acknowledged/removed; their lifecycle is also written to history.
 async function loadMessages() {
   return requestJson(`${API_BASE}/api/messages`);
 }
@@ -277,6 +291,7 @@ async function removeMessage(id) {
   });
 }
 
+// Local-driver records are manager-maintained profiles used to prefill operational details.
 async function loadLocalDrivers() {
   return requestJson(`${API_BASE}/api/local-drivers`);
 }
@@ -301,6 +316,7 @@ async function removeLocalDriver(driverNumber) {
   });
 }
 
+// Operator records supply login identities as well as assignment dropdown options.
 async function refreshForkliftOperators() {
   const operators = await requestJson(`${API_BASE}/api/forklift-operators`);
   FORKLIFT_OPERATORS.splice(0, FORKLIFT_OPERATORS.length, ...operators.map((operator) => operator.name));
@@ -334,6 +350,7 @@ async function removeForkliftOperator(name) {
   });
 }
 
+// Adds representative records without replacing any real arrivals already in the demo.
 async function seedDemoArrivals() {
   const now = Date.now();
   const arrivals = await loadArrivals();
@@ -392,12 +409,14 @@ async function seedDemoArrivals() {
   ]);
 }
 
+// Queue order is oldest check-in first so the longest-waiting vehicle stays at the top.
 function sortArrivals(arrivals) {
   return [...arrivals].sort(
     (a, b) => new Date(a.arrivedAt).getTime() - new Date(b.arrivedAt).getTime()
   );
 }
 
+// Expose one stable client API to every standalone HTML page.
 window.aptCrossdock = {
   addArrival,
   acknowledgeMessage,
