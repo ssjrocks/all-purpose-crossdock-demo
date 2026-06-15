@@ -382,6 +382,13 @@
         </div>
       `;
 
+      const requiresLoadRestraintDeclaration = ["complete", "departure-approved"].includes(item.status)
+        && !item.loadRestraintDeclaredAt;
+      if (requiresLoadRestraintDeclaration && $("#loadRestraintModal").classList.contains("hidden")) {
+        $("#loadRestraintAccepted").checked = false;
+        $("#loadRestraintModal").classList.remove("hidden");
+      }
+
       const alertKey = `apt-crossdock-alerted-${item.id}`;
       const alertValue = item.calledAt || "called";
       if (
