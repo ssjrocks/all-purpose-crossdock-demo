@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Driver Check-In | All Purpose Transport</title>
-  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-2">
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-4">
 </head>
 <body>
   <main class="shell">
@@ -41,6 +41,10 @@
           </select>
           <label for="actionsRequired">Actions required</label>
           <input id="actionsRequired" autocomplete="off" placeholder="Example: Dropping off 4 pallets and reloading for Capalaba" required>
+          <label for="localExpectedIn">Expected pallets in</label>
+          <input id="localExpectedIn" type="number" min="0" step="1" inputmode="numeric" placeholder="0" required>
+          <label for="localExpectedOut">Expected pallets out</label>
+          <input id="localExpectedOut" type="number" min="0" step="1" inputmode="numeric" placeholder="0" required>
           <button class="primary" type="submit">Register Arrival</button>
         </form>
 
@@ -67,11 +71,11 @@
           </select>
           <div id="dropoffCountWrap" class="conditional hidden">
             <label for="dropoffCount">Pallets dropping off</label>
-            <select id="dropoffCount"></select>
+            <input id="dropoffCount" type="number" min="1" step="1" inputmode="numeric" placeholder="Enter pallet quantity">
           </div>
           <div id="pickupCountWrap" class="conditional hidden">
             <label for="pickupCount">Pallets picking up</label>
-            <select id="pickupCount"></select>
+            <input id="pickupCount" type="number" min="1" step="1" inputmode="numeric" placeholder="Enter pallet quantity">
           </div>
           <label for="vehicleType">Vehicle type</label>
           <select id="vehicleType" required>
@@ -469,6 +473,8 @@
       const driverNumber = $("#driverNumber").value;
       const profile = localDriverProfiles[driverNumber];
       const actionsRequired = $("#actionsRequired").value.trim();
+      const expectedPalletsIn = Number($("#localExpectedIn").value || 0);
+      const expectedPalletsOut = Number($("#localExpectedOut").value || 0);
       if (!driverNumber || !profile || !actionsRequired) return;
       const item = await aptCrossdock.addArrival({
         type: "local",
@@ -477,6 +483,8 @@
         rego: profile.rego,
         vehicleType: profile.vehicleType,
         actionsRequired,
+        dropoffCount: expectedPalletsIn,
+        pickupCount: expectedPalletsOut,
         phone: profile.phone
       });
       localForm.reset();
@@ -555,13 +563,6 @@
       if (!showCapacity) $("#palletCapacity").value = "";
     });
 
-    function countOptions(label) {
-      return `<option value="">Select ${label}</option>`
-        + Array.from({ length: 60 }, (_, index) => index + 1)
-          .map((count) => `<option value="${count}">${count}</option>`)
-          .join("");
-    }
-
     function updateMovementFields(movementType) {
       const showDropoff = ["Inbound", "Inbound + Pickup"].includes(movementType);
       const showPickup = ["Outbound", "Inbound + Pickup"].includes(movementType);
@@ -573,8 +574,6 @@
       if (!showPickup) $("#pickupCount").value = "";
     }
 
-    $("#dropoffCount").innerHTML = countOptions("drop-off pallets");
-    $("#pickupCount").innerHTML = countOptions("pickup pallets");
     $("#movementType").addEventListener("change", (event) => updateMovementFields(event.target.value));
 
     driverStatus.addEventListener("click", async (event) => {

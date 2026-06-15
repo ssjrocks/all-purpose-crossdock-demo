@@ -193,6 +193,28 @@ async function buildStatistics() {
   const palletIn = vehicles.reduce((sum, item) => sum + Number(item.dropoffCount || 0), 0);
   const palletOut = vehicles.reduce((sum, item) => sum + Number(item.pickupCount || 0), 0);
   const now = new Date();
+  const activeOperatorNames = new Set(operatorSessions
+    .filter((record) =>
+      !record.logoutAt
+      && (now.getTime() - new Date(record.lastSeenAt || record.loginAt).getTime()) <= 150000
+    )
+    .map((record) => record.operatorName));
+  const operatorsOnBreak = new Set(tasks
+    .filter((task) => task.taskType === "break" && task.status === "working")
+    .map((task) => task.operatorName));
+  const operatorsOnVehicle = new Set(arrivals
+    .filter((item) => item.status === "working" && item.forkliftOperator)
+    .map((item) => item.forkliftOperator));
+  const operatorsOnTask = new Set(tasks
+    .filter((task) => task.taskType !== "break" && task.status === "working" && task.activeOperator)
+    .map((task) => task.activeOperator));
+  const resourceState = [...activeOperatorNames].reduce((counts, name) => {
+    if (operatorsOnBreak.has(name)) counts.onBreak += 1;
+    else if (operatorsOnVehicle.has(name)) counts.onVehicle += 1;
+    else if (operatorsOnTask.has(name)) counts.onTask += 1;
+    else counts.idle += 1;
+    return counts;
+  }, { loggedIn: activeOperatorNames.size, onVehicle: 0, onTask: 0, onBreak: 0, idle: 0 });
   const operatorStats = operators.map((operator) => {
     const name = operator.name;
     const workedVehicles = arrivals.filter((item) =>
@@ -206,6 +228,14 @@ async function buildStatistics() {
       && task.status === "complete"
       && (task.activeOperator === name || task.actedBy === name)
     );
+    const taskWorkItems = tasks.filter((task) =>
+      task.taskType !== "break"
+      && task.startedAt
+      && (task.activeOperator === name || task.actedBy === name)
+    );
+    const vehicleWorkItems = arrivals.filter((item) =>
+      item.forkliftOperator === name && item.workStartedAt
+    );
     const breaks = tasks.filter((task) =>
       task.taskType === "break" && task.operatorName === name && task.breakStartedAt
     );
@@ -215,9 +245,9 @@ async function buildStatistics() {
         record.loginAt,
         record.logoutAt || record.lastSeenAt || now
       ), 0);
-    const vehicleWorkMinutes = workedVehicles.reduce((sum, item) =>
+    const vehicleWorkMinutes = vehicleWorkItems.reduce((sum, item) =>
       sum + minutesBetween(item.workStartedAt, item.completedAt || now), 0);
-    const taskWorkMinutes = completedTasks.reduce((sum, task) =>
+    const taskWorkMinutes = taskWorkItems.reduce((sum, task) =>
       sum + minutesBetween(task.startedAt, task.completedAt || now), 0);
     const breakMinutes = breaks.reduce((sum, task) =>
       sum + minutesBetween(task.breakStartedAt, task.completedAt || now), 0);
@@ -227,6 +257,8 @@ async function buildStatistics() {
       tasksCompleted: completedTasks.length,
       palletsUnloaded: workedVehicles.reduce((sum, item) => sum + Number(item.dropoffCount || 0), 0),
       palletsLoaded: workedVehicles.reduce((sum, item) => sum + Number(item.pickupCount || 0), 0),
+      vehicleWorkMinutes: Math.round(vehicleWorkMinutes),
+      taskWorkMinutes: Math.round(taskWorkMinutes),
       workMinutes: Math.round(vehicleWorkMinutes + taskWorkMinutes),
       breakMinutes: Math.round(breakMinutes),
       loggedInMinutes: Math.round(sessionMinutes),
@@ -243,6 +275,7 @@ async function buildStatistics() {
       palletsOut: palletOut,
       tasksCompleted: history.filter((entry) => entry.entityType === "task" && entry.action === "Task completed").length
     },
+    resources: resourceState,
     vehicles,
     operators: operatorStats
   };

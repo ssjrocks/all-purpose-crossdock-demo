@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Manager Queue | All Purpose Transport</title>
-  <link rel="stylesheet" href="apt-crossdock.css?v=20260614-2">
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-4">
 </head>
 <body>
   <main class="shell">
@@ -46,15 +46,29 @@
     <section class="manager-layout hidden" id="managerWorkPanel">
       <div class="panel">
         <div class="panel-head">
-          <h2>Waiting Vehicles</h2>
-          <p>Select a vehicle when it can proceed to the crossdock entry.</p>
+          <h2>Crossdock Overview</h2>
+          <p>Live vehicle demand and forklift operator availability.</p>
         </div>
 
-        <div class="manager-grid" aria-label="Queue summary">
-          <div class="metric"><strong id="waitingCount">0</strong><span>Waiting</span></div>
-          <div class="metric"><strong id="calledCount">0</strong><span>In Crossdock</span></div>
-          <div class="metric"><strong id="localCount">0</strong><span>Local</span></div>
-          <div class="metric"><strong id="linehaulCount">0</strong><span>Outside Carrier</span></div>
+        <div class="overview-band">
+          <h3>Waiting Vehicles</h3>
+          <div class="manager-grid" aria-label="Queue summary">
+            <div class="metric"><strong id="waitingCount">0</strong><span>Waiting</span></div>
+            <div class="metric"><strong id="calledCount">0</strong><span>In Crossdock</span></div>
+            <div class="metric"><strong id="localCount">0</strong><span>Local</span></div>
+            <div class="metric"><strong id="linehaulCount">0</strong><span>Outside Carrier</span></div>
+          </div>
+        </div>
+
+        <div class="overview-band">
+          <h3>Forklift Operator Activity</h3>
+          <div class="manager-grid resource-grid" aria-label="Forklift operator activity">
+            <div class="metric"><strong id="loggedInOperatorCount">0</strong><span>Logged In</span></div>
+            <div class="metric"><strong id="vehicleOperatorCount">0</strong><span>On Vehicle</span></div>
+            <div class="metric"><strong id="taskOperatorCount">0</strong><span>On Task</span></div>
+            <div class="metric"><strong id="breakOperatorCount">0</strong><span>On Break</span></div>
+            <div class="metric"><strong id="idleOperatorCount">0</strong><span>Available / Idle</span></div>
+          </div>
         </div>
 
         <div class="queue-tools">
@@ -226,12 +240,18 @@
       });
     }
 
-    function renderMetrics(arrivals) {
+    async function renderMetrics(arrivals) {
       waitingCount.textContent = arrivals.filter((item) => item.status === "waiting").length;
       calledCount.textContent = arrivals.filter((item) => item.status === "called" || item.status === "working").length;
       const active = arrivals.filter((item) => !["complete", "departure-approved"].includes(item.status));
       localCount.textContent = active.filter((item) => item.type === "local").length;
       linehaulCount.textContent = active.filter((item) => item.type === "linehaul" || item.type === "outside").length;
+      const statistics = await aptCrossdock.loadStatistics();
+      $("#loggedInOperatorCount").textContent = statistics.resources.loggedIn;
+      $("#vehicleOperatorCount").textContent = statistics.resources.onVehicle;
+      $("#taskOperatorCount").textContent = statistics.resources.onTask;
+      $("#breakOperatorCount").textContent = statistics.resources.onBreak;
+      $("#idleOperatorCount").textContent = statistics.resources.idle;
     }
 
     async function renderQueue(force = false) {
@@ -239,7 +259,7 @@
       if (operatorSelectionActive && !force) return;
       const allArrivals = await aptCrossdock.loadArrivals();
       const arrivals = getFilteredArrivals(allArrivals);
-      renderMetrics(allArrivals);
+      await renderMetrics(allArrivals);
 
       if (!arrivals.length) {
         truckList.innerHTML = `<div class="empty">No vehicles match the current queue view.</div>`;
@@ -305,6 +325,8 @@
         details.unshift(
           ["Registration", item.rego || "Not supplied"],
           ["Vehicle Type", item.vehicleType || "Not supplied"],
+          ["Expected Pallets In", String(item.dropoffCount || 0)],
+          ["Expected Pallets Out", String(item.pickupCount || 0)],
           ["Actions Required", item.actionsRequired || "Not supplied"]
         );
       } else {

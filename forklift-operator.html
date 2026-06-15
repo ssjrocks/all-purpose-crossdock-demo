@@ -295,6 +295,8 @@
         details.unshift(
           ["Registration", item.rego || "Not supplied"],
           ["Vehicle Type", item.vehicleType || "Not supplied"],
+          ["Expected Pallets In", String(item.dropoffCount || 0)],
+          ["Expected Pallets Out", String(item.pickupCount || 0)],
           ["Actions Required", item.actionsRequired || "Not supplied"]
         );
       } else {

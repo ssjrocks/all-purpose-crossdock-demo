@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Statistics | All Purpose Transport</title>
-  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-3">
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-4">
 </head>
 <body>
   <main class="shell">
@@ -87,6 +87,27 @@
           </table>
         </div>
       </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Operator Task Time</h2>
+          <p>Time recorded between starting and completing ad hoc forklift tasks.</p>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Operator</th>
+                <th>Tasks Completed</th>
+                <th>Task Time</th>
+                <th>Vehicle Time</th>
+                <th>Total Work Time</th>
+              </tr>
+            </thead>
+            <tbody id="operatorTaskStatistics"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -126,6 +147,17 @@
             </tr>
           `).join("")
         : '<tr><td colspan="8">No forklift operator statistics are available yet.</td></tr>';
+      $("#operatorTaskStatistics").innerHTML = statistics.operators.length
+        ? statistics.operators.map((operator) => `
+            <tr>
+              <td><strong>${aptCrossdock.escapeHtml(operator.name)}</strong></td>
+              <td>${operator.tasksCompleted}</td>
+              <td>${durationLabel(operator.taskWorkMinutes)}</td>
+              <td>${durationLabel(operator.vehicleWorkMinutes)}</td>
+              <td>${durationLabel(operator.workMinutes)}</td>
+            </tr>
+          `).join("")
+        : '<tr><td colspan="5">No operator task-time records are available yet.</td></tr>';
       $("#vehicleStatistics").innerHTML = statistics.vehicles.length
         ? statistics.vehicles.map((vehicle) => `
             <tr>

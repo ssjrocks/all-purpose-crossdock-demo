@@ -883,6 +883,20 @@ textarea:focus {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.overview-band {
+  padding: 0 16px 16px;
+}
+
+.overview-band h3 {
+  margin: 0 0 9px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.resource-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .data-table-wrap {
   width: 100%;
   overflow-x: auto;
