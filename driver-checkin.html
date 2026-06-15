@@ -316,6 +316,7 @@
       const item = arrivals.find((arrival) => arrival.id === lastId);
       registrationControls.classList.toggle("hidden", Boolean(item));
       if (!item) {
+        if (lastId) localStorage.removeItem("apt-crossdock-last-driver");
         stopCalledAlert();
         driverStatus.innerHTML = "";
         driverMessageActivity.classList.add("hidden");
@@ -675,11 +676,18 @@
       const arrivals = await aptCrossdock.loadArrivals();
       const arrival = arrivals.find((item) => item.id === arrivalId);
       if (!arrival) return;
-      await aptCrossdock.updateArrival(arrival.id, {
-        loadRestraintDeclaredAt: new Date().toISOString(),
-        loadRestraintDeclarationVersion: "Driver load restraint declaration v1",
-        loadRestraintDeclaredBy: arrival.driverName || arrival.label
-      });
+      const declaration = {
+        loadRestraintDeclaredAt: arrival.loadRestraintDeclaredAt || new Date().toISOString(),
+        loadRestraintDeclarationVersion: arrival.loadRestraintDeclarationVersion || "Driver load restraint declaration v1",
+        loadRestraintDeclaredBy: arrival.loadRestraintDeclaredBy || arrival.driverName || arrival.label
+      };
+      try {
+        await aptCrossdock.updateArrival(arrival.id, declaration);
+      } catch {
+        const refreshedArrivals = await aptCrossdock.loadArrivals();
+        const refreshed = refreshedArrivals.find((item) => item.id === arrival.id);
+        if (!refreshed?.loadRestraintDeclaredAt) throw new Error("Declaration could not be saved");
+      }
       localStorage.removeItem("apt-crossdock-last-driver");
       event.target.reset();
       $("#loadRestraintModal").classList.add("hidden");

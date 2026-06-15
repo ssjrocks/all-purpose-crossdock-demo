@@ -768,6 +768,7 @@ async function handleApi(req, res, urlPath) {
     }
     const previousStatus = item.status;
     const previousOperator = item.forkliftOperator || "";
+    const previousLoadRestraintDeclaredAt = item.loadRestraintDeclaredAt || null;
     if (body.status) {
       const nextStatus = ["waiting", "called", "working", "complete", "departure-approved"].includes(body.status)
         ? body.status
@@ -805,7 +806,7 @@ async function handleApi(req, res, urlPath) {
       item.loadRestraintDeclaredBy = body.loadRestraintDeclaredBy || item.driverName || item.label;
     }
     await writeArrivals(arrivals);
-    if (body.loadRestraintDeclaredAt && !previous.loadRestraintDeclaredAt) {
+    if (body.loadRestraintDeclaredAt && !previousLoadRestraintDeclaredAt) {
       await addHistoryEntry({
         entityType: "vehicle",
         entityId: item.id,
