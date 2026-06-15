@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forklift Operator | All Purpose Transport</title>
-  <link rel="stylesheet" href="apt-crossdock.css?v=20260614-2">
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-2">
 </head>
 <body>
   <main class="shell">
@@ -233,6 +233,7 @@
       }
 
       truckList.innerHTML = arrivals.map((item) => {
+        const assignedToCurrentOperator = item.status === "waiting" && item.forkliftOperator === currentOperator;
         const phone = item.phone || "";
         const safePhone = aptCrossdock.cleanPhone(phone);
         const phoneLink = phone ? `<a class="secondary" href="tel:${safePhone}">Call Driver</a>` : "";
@@ -251,12 +252,13 @@
           : "";
 
         return `
-          <article class="truck ${item.status === "working" ? "called" : ""}">
+          <article class="truck ${item.status === "working" ? "called" : ""} ${assignedToCurrentOperator ? "assigned-to-me" : ""}">
             <div class="truck-top">
               <div class="truck-title">
                 <h3>${aptCrossdock.escapeHtml(item.label)}</h3>
                 <span class="badge">${item.type === "local" ? "Local" : "Outside Carrier"}</span>
                 <span class="badge ${item.status === "waiting" ? "waiting" : "called"}">${statusLabel(item.status)}</span>
+                ${assignedToCurrentOperator ? '<span class="badge assigned">Assigned to you</span>' : ""}
               </div>
               <span class="badge">Arrived ${aptCrossdock.formatTime(item.arrivedAt)}</span>
             </div>
@@ -343,6 +345,8 @@
 
       taskList.innerHTML = activeTasks.map((task) => {
         if (task.taskType === "break") return renderBreakTask(task);
+        const assignedToCurrentOperator = task.suggestedOperator === currentOperator
+          || task.activeOperator === currentOperator;
         const startButton = task.status === "open"
           ? `<button class="primary" type="button" data-task-action="working" data-id="${task.id}">Start Task</button>`
           : "";
@@ -350,11 +354,12 @@
           ? `<button class="primary" type="button" data-task-action="complete" data-id="${task.id}">Complete Task</button>`
           : "";
         return `
-          <article class="task-item ${task.status === "working" ? "working" : ""}">
+          <article class="task-item ${task.status === "working" ? "working" : ""} ${assignedToCurrentOperator ? "assigned-to-me" : ""}">
             <div class="truck-top">
               <div class="truck-title">
                 <strong>Task</strong>
                 <span class="badge ${task.status === "open" ? "waiting" : "called"}">${task.status === "working" ? "Working" : "Open"}</span>
+                ${assignedToCurrentOperator ? '<span class="badge assigned">Assigned to you</span>' : ""}
               </div>
               <span class="badge">${aptCrossdock.formatTime(task.createdAt)}</span>
             </div>

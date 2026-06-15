@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Driver Check-In | All Purpose Transport</title>
-  <link rel="stylesheet" href="apt-crossdock.css?v=20260614-2">
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-2">
 </head>
 <body>
   <main class="shell">
@@ -159,8 +159,19 @@
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="departureRequestTitle">
         <div class="modal-head"><h2 id="departureRequestTitle">Departure Request</h2></div>
         <form id="departureRequestForm">
-          <label for="departureReason">Reason for leaving</label>
-          <textarea id="departureReason" maxlength="300" placeholder="Explain why you need to leave" required></textarea>
+          <fieldset class="departure-reasons hidden" id="leaveSiteReasons">
+            <legend>Standard reason</legend>
+            <label class="checkbox-option">
+              <input type="checkbox" name="leaveSiteReason" value="Loading complete">
+              <span>Loading complete</span>
+            </label>
+            <label class="checkbox-option">
+              <input type="checkbox" name="leaveSiteReason" value="Change of plans, loading no longer required">
+              <span>Change of plans, loading no longer required</span>
+            </label>
+          </fieldset>
+          <label for="departureReason" id="departureReasonLabel">Reason for leaving (optional)</label>
+          <textarea id="departureReason" maxlength="300" placeholder="Add any extra details"></textarea>
           <button class="primary" type="submit">Send Request</button>
           <button class="secondary" id="cancelDepartureRequest" type="button">Cancel</button>
         </form>
@@ -544,6 +555,17 @@
         $("#departureRequestTitle").textContent = departureRequestType === "leave-queue"
           ? "Request To Leave Queue"
           : "Request To Leave Site";
+        const isLeaveSite = departureRequestType === "leave-site";
+        $("#leaveSiteReasons").classList.toggle("hidden", !isLeaveSite);
+        document.querySelectorAll('input[name="leaveSiteReason"]').forEach((input) => {
+          input.checked = false;
+        });
+        $("#departureReasonLabel").textContent = isLeaveSite
+          ? "Additional written reason (optional)"
+          : "Reason for leaving the queue (optional)";
+        $("#departureReason").placeholder = isLeaveSite
+          ? "Add any extra details"
+          : "Tell the manager why you need to leave, if needed";
         $("#departureReason").value = "";
         $("#departureRequestModal").classList.remove("hidden");
         return;
@@ -601,6 +623,11 @@
       const arrivals = await aptCrossdock.loadArrivals();
       const arrival = arrivals.find((item) => item.id === arrivalId);
       if (!arrival) return;
+      const selectedReasons = departureRequestType === "leave-site"
+        ? [...document.querySelectorAll('input[name="leaveSiteReason"]:checked')].map((input) => input.value)
+        : [];
+      const writtenReason = $("#departureReason").value.trim();
+      const reasonParts = [...selectedReasons, writtenReason].filter(Boolean);
       await aptCrossdock.sendMessage({
         fromType: "driver",
         fromName: arrival.driverName || arrival.label,
@@ -611,7 +638,7 @@
         requestType: departureRequestType,
         arrivalId: arrival.id,
         vehicleLabel: arrival.label,
-        text: $("#departureReason").value.trim()
+        text: reasonParts.length ? reasonParts.join(". ") : "No reason given"
       });
       event.target.reset();
       $("#departureRequestModal").classList.add("hidden");
