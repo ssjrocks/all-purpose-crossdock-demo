@@ -28,6 +28,7 @@ Open the following pages on the server computer:
 - Manager queue: `http://localhost:4173/manager-queue.html`
 - Forklift operator: `http://localhost:4173/forklift-operator.html`
 - History: `http://localhost:4173/history.html`
+- Statistics: `http://localhost:4173/statistics.html`
 - System configuration: `http://localhost:4173/system-configuration.html`
 
 For another device on the same network, replace `localhost` with the server

@@ -12,6 +12,7 @@ const MESSAGES_FILE = path.join(ROOT, "messages.txt");
 const HISTORY_FILE = path.join(ROOT, "history.txt");
 const LOCAL_DRIVERS_FILE = path.join(ROOT, "local-drivers.txt");
 const FORKLIFT_OPERATORS_FILE = path.join(ROOT, "forklift-operators.txt");
+const OPERATOR_SESSIONS_FILE = path.join(ROOT, "operator-sessions.txt");
 const DEFAULT_FORKLIFT_OPERATORS = ["Alex", "Ben", "Chris", "Sam"].map(createDefaultOperator);
 const sessions = new Map();
 const DEFAULT_LOCAL_DRIVERS = [
@@ -139,6 +140,114 @@ function createSession(user) {
   return token;
 }
 
+async function startOperatorSession(user, token) {
+  const records = await readCollection(OPERATOR_SESSIONS_FILE);
+  const record = {
+    id: crypto.randomUUID(),
+    operatorName: user.name,
+    loginAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    logoutAt: null
+  };
+  records.unshift(record);
+  await writeCollection(OPERATOR_SESSIONS_FILE, records);
+  const session = sessions.get(token);
+  if (session) session.operatorSessionId = record.id;
+}
+
+async function touchOperatorSession(session, close = false) {
+  if (!session?.operatorSessionId) return;
+  const records = await readCollection(OPERATOR_SESSIONS_FILE);
+  const record = records.find((item) => item.id === session.operatorSessionId);
+  if (!record) return;
+  record.lastSeenAt = new Date().toISOString();
+  if (close) record.logoutAt = record.lastSeenAt;
+  await writeCollection(OPERATOR_SESSIONS_FILE, records);
+}
+
+function minutesBetween(start, end) {
+  const startTime = new Date(start).getTime();
+  const endTime = new Date(end).getTime();
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) return 0;
+  return (endTime - startTime) / 60000;
+}
+
+async function buildStatistics() {
+  const [arrivals, tasks, history, operators, operatorSessions] = await Promise.all([
+    readArrivals(),
+    readCollection(TASKS_FILE),
+    readCollection(HISTORY_FILE),
+    readCollection(FORKLIFT_OPERATORS_FILE),
+    readCollection(OPERATOR_SESSIONS_FILE)
+  ]);
+  const completedVehicleHistory = history.filter((entry) =>
+    entry.entityType === "vehicle" && entry.action === "Vehicle work completed"
+  );
+  const completedIds = new Set([
+    ...arrivals.filter((item) => item.status === "complete").map((item) => item.id),
+    ...completedVehicleHistory.map((entry) => entry.entityId)
+  ]);
+  const vehicles = arrivals
+    .filter((item) => completedIds.has(item.id))
+    .sort((a, b) => new Date(b.completedAt || b.arrivedAt) - new Date(a.completedAt || a.arrivedAt));
+  const palletIn = vehicles.reduce((sum, item) => sum + Number(item.dropoffCount || 0), 0);
+  const palletOut = vehicles.reduce((sum, item) => sum + Number(item.pickupCount || 0), 0);
+  const now = new Date();
+  const operatorStats = operators.map((operator) => {
+    const name = operator.name;
+    const workedVehicles = arrivals.filter((item) =>
+      item.forkliftOperator === name && (item.status === "complete" || item.completedAt)
+    );
+    const vehicleHistoryCount = new Set(completedVehicleHistory
+      .filter((entry) => entry.actor === name)
+      .map((entry) => entry.entityId)).size;
+    const completedTasks = tasks.filter((task) =>
+      task.taskType !== "break"
+      && task.status === "complete"
+      && (task.activeOperator === name || task.actedBy === name)
+    );
+    const breaks = tasks.filter((task) =>
+      task.taskType === "break" && task.operatorName === name && task.breakStartedAt
+    );
+    const sessionMinutes = operatorSessions
+      .filter((record) => record.operatorName === name)
+      .reduce((sum, record) => sum + minutesBetween(
+        record.loginAt,
+        record.logoutAt || record.lastSeenAt || now
+      ), 0);
+    const vehicleWorkMinutes = workedVehicles.reduce((sum, item) =>
+      sum + minutesBetween(item.workStartedAt, item.completedAt || now), 0);
+    const taskWorkMinutes = completedTasks.reduce((sum, task) =>
+      sum + minutesBetween(task.startedAt, task.completedAt || now), 0);
+    const breakMinutes = breaks.reduce((sum, task) =>
+      sum + minutesBetween(task.breakStartedAt, task.completedAt || now), 0);
+    return {
+      name,
+      vehiclesWorked: Math.max(workedVehicles.length, vehicleHistoryCount),
+      tasksCompleted: completedTasks.length,
+      palletsUnloaded: workedVehicles.reduce((sum, item) => sum + Number(item.dropoffCount || 0), 0),
+      palletsLoaded: workedVehicles.reduce((sum, item) => sum + Number(item.pickupCount || 0), 0),
+      workMinutes: Math.round(vehicleWorkMinutes + taskWorkMinutes),
+      breakMinutes: Math.round(breakMinutes),
+      loggedInMinutes: Math.round(sessionMinutes),
+      idleMinutes: Math.max(0, Math.round(sessionMinutes - vehicleWorkMinutes - taskWorkMinutes - breakMinutes))
+    };
+  });
+  return {
+    overview: {
+      vehiclesCheckedIn: new Set(history
+        .filter((entry) => entry.entityType === "vehicle" && entry.action === "Vehicle checked in")
+        .map((entry) => entry.entityId)).size,
+      vehiclesCompleted: completedIds.size,
+      palletsIn: palletIn,
+      palletsOut: palletOut,
+      tasksCompleted: history.filter((entry) => entry.entityType === "task" && entry.action === "Task completed").length
+    },
+    vehicles,
+    operators: operatorStats
+  };
+}
+
 function getSession(req) {
   const authorization = req.headers.authorization || "";
   if (!authorization.startsWith("Bearer ")) return null;
@@ -231,7 +340,9 @@ async function handleApi(req, res, urlPath) {
       return true;
     }
     const user = { role: "operator", name: operator.name, mustChangePassword: Boolean(operator.mustChangePassword) };
-    sendJson(res, 200, { token: createSession(user), user });
+    const token = createSession(user);
+    await startOperatorSession(user, token);
+    sendJson(res, 200, { token, user });
     return true;
   }
 
@@ -247,7 +358,22 @@ async function handleApi(req, res, urlPath) {
 
   if (urlPath === "/api/auth/logout" && req.method === "POST") {
     const authorization = req.headers.authorization || "";
-    if (authorization.startsWith("Bearer ")) sessions.delete(authorization.slice(7));
+    if (authorization.startsWith("Bearer ")) {
+      const token = authorization.slice(7);
+      await touchOperatorSession(sessions.get(token), true);
+      sessions.delete(token);
+    }
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (urlPath === "/api/auth/heartbeat" && req.method === "POST") {
+    const session = getSession(req);
+    if (!session) {
+      sendJson(res, 401, { error: "Login required" });
+      return true;
+    }
+    await touchOperatorSession(session);
     sendJson(res, 200, { ok: true });
     return true;
   }
@@ -304,6 +430,12 @@ async function handleApi(req, res, urlPath) {
     }
     await writeArrivals([]);
     sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (urlPath === "/api/statistics" && req.method === "GET") {
+    if (!requireManager(req, res)) return true;
+    sendJson(res, 200, await buildStatistics());
     return true;
   }
 
@@ -566,7 +698,12 @@ async function handleApi(req, res, urlPath) {
       actor: item.driverName || item.label,
       details: item.type === "local"
         ? item.actionsRequired || ""
-        : `${item.rego || ""} / ${item.movementType || ""}`
+        : [
+            item.rego || "",
+            item.movementType || "",
+            `Pallets in: ${Number(item.dropoffCount || 0)}`,
+            `Pallets out: ${Number(item.pickupCount || 0)}`
+          ].join(" / ")
     });
     if (item.inductionAcceptedAt) {
       await addHistoryEntry({
@@ -738,6 +875,7 @@ Promise.all([
   readCollection(TASKS_FILE),
   readCollection(MESSAGES_FILE),
   readCollection(HISTORY_FILE),
+  readCollection(OPERATOR_SESSIONS_FILE),
   ensureLocalDrivers(),
   ensureForkliftOperators()
 ]).then(() => {

@@ -20,6 +20,7 @@
         <a class="active" href="manager-queue.html">Manager Page</a>
         <a href="forklift-operator.html">Forklift Page</a>
         <a href="history.html">History</a>
+        <a href="statistics.html">Statistics</a>
         <a href="system-configuration.html">System Configuration</a>
         <button class="secondary hidden" id="managerLogout" type="button">Log Out</button>
       </nav>
@@ -312,6 +313,8 @@
           0,
           ["Registration", item.rego],
           ["Movement", item.movementType || "Not supplied"],
+          ["Pallets In", String(item.dropoffCount || 0)],
+          ["Pallets Out", String(item.pickupCount || 0)],
           ["Vehicle Type", vehicleTypeLabel(item)],
           ["Description", item.vehicleDescription || "Not supplied"]
         );
@@ -376,7 +379,8 @@
       if (taskSelectionActive && !force) return;
       const tasks = await aptCrossdock.loadTasks();
       const sorted = [...tasks]
-        .filter((task) => task.taskType !== "break" || !["rejected", "complete"].includes(task.status))
+        .filter((task) => task.status !== "complete")
+        .filter((task) => task.taskType !== "break" || task.status !== "rejected")
         .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
       showBreakRequest(tasks);
       if (!sorted.length) {
@@ -395,6 +399,7 @@
           </div>
           <p class="task-description">${aptCrossdock.escapeHtml(task.description)}</p>
           <div class="details">
+            <div class="detail"><span>Created By</span><b>${aptCrossdock.escapeHtml(task.createdBy || "Manager")}</b></div>
             <div class="detail"><span>Suggested</span><b>${aptCrossdock.escapeHtml(task.suggestedOperator || "Anyone available")}</b></div>
             <div class="detail"><span>Working Operator</span><b>${aptCrossdock.escapeHtml(task.activeOperator || "Not started")}</b></div>
           </div>
@@ -728,12 +733,15 @@
 
     $("#sendLeaveResponse").addEventListener("click", async () => {
       if (!activeLeaveRequestId) return;
-      const response = $("#leaveResponseText").value.trim()
+      const responseDetail = $("#leaveResponseText").value.trim()
         || (leaveDecision === "granted" ? "Your request is granted, have a nice day." : "");
-      if (!response && leaveDecision === "denied") {
+      if (!responseDetail && leaveDecision === "denied") {
         $("#leaveResponseText").focus();
         return;
       }
+      const response = leaveDecision === "denied"
+        ? `Your request was denied. ${responseDetail}`
+        : responseDetail;
       await aptCrossdock.acknowledgeMessage(activeLeaveRequestId, "Manager");
       await aptCrossdock.sendMessage({
         fromType: "manager",

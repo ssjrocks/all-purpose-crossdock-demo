@@ -62,8 +62,17 @@
           <select id="movementType" required>
             <option value="">Select movement</option>
             <option>Inbound</option>
-            <option>Pickup</option>
+            <option>Outbound</option>
+            <option>Inbound + Pickup</option>
           </select>
+          <div id="dropoffCountWrap" class="conditional hidden">
+            <label for="dropoffCount">Pallets dropping off</label>
+            <select id="dropoffCount"></select>
+          </div>
+          <div id="pickupCountWrap" class="conditional hidden">
+            <label for="pickupCount">Pallets picking up</label>
+            <select id="pickupCount"></select>
+          </div>
           <label for="vehicleType">Vehicle type</label>
           <select id="vehicleType" required>
             <option value="">Select vehicle type</option>
@@ -448,6 +457,7 @@
       $("#otherCustomer").required = false;
       $("#palletCapacityWrap").classList.add("hidden");
       $("#palletCapacity").required = false;
+      updateMovementFields("");
     }
 
     localTab.addEventListener("click", () => setType("local"));
@@ -480,6 +490,8 @@
       const otherCustomer = $("#otherCustomer").value.trim();
       const customerName = customerSelect === "Other" ? otherCustomer : customerSelect;
       const movementType = $("#movementType").value;
+      const dropoffCount = Number($("#dropoffCount").value || 0);
+      const pickupCount = Number($("#pickupCount").value || 0);
       const vehicleType = $("#vehicleType").value;
       const palletCapacity = $("#palletCapacity").value;
       const rego = $("#linehaulRego").value.trim().toUpperCase();
@@ -488,10 +500,14 @@
       const phone = $("#phoneNumber").value.trim();
       if (!customerName || !movementType || !vehicleType || !rego || !vehicleDescription || !driverName || !phone) return;
       if (vehicleType === "Rigid" && !palletCapacity) return;
+      if (["Inbound", "Inbound + Pickup"].includes(movementType) && !dropoffCount) return;
+      if (["Outbound", "Inbound + Pickup"].includes(movementType) && !pickupCount) return;
       pendingOutsideArrival = {
         type: "outside",
         label: customerName,
         movementType,
+        dropoffCount,
+        pickupCount,
         vehicleType,
         palletCapacity,
         rego,
@@ -538,6 +554,28 @@
       $("#palletCapacity").required = showCapacity;
       if (!showCapacity) $("#palletCapacity").value = "";
     });
+
+    function countOptions(label) {
+      return `<option value="">Select ${label}</option>`
+        + Array.from({ length: 60 }, (_, index) => index + 1)
+          .map((count) => `<option value="${count}">${count}</option>`)
+          .join("");
+    }
+
+    function updateMovementFields(movementType) {
+      const showDropoff = ["Inbound", "Inbound + Pickup"].includes(movementType);
+      const showPickup = ["Outbound", "Inbound + Pickup"].includes(movementType);
+      $("#dropoffCountWrap").classList.toggle("hidden", !showDropoff);
+      $("#pickupCountWrap").classList.toggle("hidden", !showPickup);
+      $("#dropoffCount").required = showDropoff;
+      $("#pickupCount").required = showPickup;
+      if (!showDropoff) $("#dropoffCount").value = "";
+      if (!showPickup) $("#pickupCount").value = "";
+    }
+
+    $("#dropoffCount").innerHTML = countOptions("drop-off pallets");
+    $("#pickupCount").innerHTML = countOptions("pickup pallets");
+    $("#movementType").addEventListener("change", (event) => updateMovementFields(event.target.value));
 
     driverStatus.addEventListener("click", async (event) => {
       if (event.target.closest(".message-user")) {

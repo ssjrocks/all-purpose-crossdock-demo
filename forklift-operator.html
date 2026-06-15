@@ -301,6 +301,8 @@
         details.unshift(
           ["Registration", item.rego],
           ["Movement", item.movementType || "Not supplied"],
+          ["Pallets In", String(item.dropoffCount || 0)],
+          ["Pallets Out", String(item.pickupCount || 0)],
           ["Vehicle Type", vehicleTypeLabel(item)],
           ["Description", item.vehicleDescription || "Not supplied"]
         );
@@ -365,6 +367,7 @@
             </div>
             <p class="task-description">${aptCrossdock.escapeHtml(task.description)}</p>
             <div class="details">
+              <div class="detail"><span>Created By</span><b>${aptCrossdock.escapeHtml(task.createdBy || "Manager")}</b></div>
               <div class="detail"><span>Suggested</span><b>${aptCrossdock.escapeHtml(task.suggestedOperator || "Anyone available")}</b></div>
               <div class="detail"><span>Working Operator</span><b>${aptCrossdock.escapeHtml(task.activeOperator || "Not started")}</b></div>
             </div>
@@ -685,6 +688,9 @@
       }
     }
     initialiseForkliftPage();
+    setInterval(() => {
+      if (currentOperator) aptCrossdock.heartbeat().catch(() => {});
+    }, 60000);
     setInterval(() => {
       renderQueue();
       renderTasks();

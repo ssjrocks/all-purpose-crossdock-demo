@@ -101,6 +101,14 @@ async function logout() {
   }
 }
 
+async function heartbeat() {
+  return requestJson(`${API_BASE}/api/auth/heartbeat`, { method: "POST", body: "{}" });
+}
+
+async function loadStatistics() {
+  return requestJson(`${API_BASE}/api/statistics`);
+}
+
 async function changePassword(password) {
   const result = await requestJson(`${API_BASE}/api/auth/change-password`, {
     method: "POST",
@@ -335,6 +343,8 @@ async function seedDemoArrivals() {
       type: "outside",
       label: "Petbarn",
       movementType: "Inbound",
+      dropoffCount: 18,
+      pickupCount: 0,
       vehicleType: "Semi trailer",
       palletCapacity: "",
       rego: "NSW456",
@@ -364,7 +374,9 @@ async function seedDemoArrivals() {
       id: createId(),
       type: "outside",
       label: "VT",
-      movementType: "Pickup",
+      movementType: "Inbound + Pickup",
+      dropoffCount: 6,
+      pickupCount: 10,
       vehicleType: "Rigid",
       palletCapacity: "12",
       rego: "VIC882",
@@ -400,11 +412,13 @@ window.aptCrossdock = {
   escapeHtml,
   forkliftOperators: FORKLIFT_OPERATORS,
   formatTime,
+  heartbeat,
   currentUser,
   loadArrivals,
   loadHistory,
   loadLocalDrivers,
   loadMessages,
+  loadStatistics,
   loadTasks,
   login,
   logout,

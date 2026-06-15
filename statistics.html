@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Statistics | All Purpose Transport</title>
+  <link rel="stylesheet" href="apt-crossdock.css?v=20260615-3">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark"><img src="apt-logo.jpeg" alt="All Purpose Transport"></div>
+        <div>
+          <h1>Crossdock Statistics</h1>
+          <p class="subtitle">Vehicle throughput, pallet movements, and forklift activity</p>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Pages">
+        <a href="manager-queue.html">Manager Page</a>
+        <a href="forklift-operator.html">Forklift Page</a>
+        <a href="history.html">History</a>
+        <a class="active" href="statistics.html">Statistics</a>
+        <a href="system-configuration.html">System Configuration</a>
+        <button class="secondary" id="statisticsLogout" type="button">Log Out</button>
+      </nav>
+    </header>
+
+    <section class="manager-layout hidden" id="statisticsPanel">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Crossdock Overview</h2>
+          <p>Totals are calculated from recorded arrivals, completed work, and structured pallet quantities.</p>
+        </div>
+        <div class="manager-grid statistics-grid" aria-label="Crossdock totals">
+          <div class="metric"><strong id="vehiclesCheckedIn">0</strong><span>Vehicles Checked In</span></div>
+          <div class="metric"><strong id="vehiclesCompleted">0</strong><span>Vehicles Completed</span></div>
+          <div class="metric"><strong id="palletsIn">0</strong><span>Pallets In</span></div>
+          <div class="metric"><strong id="palletsOut">0</strong><span>Pallets Out</span></div>
+          <div class="metric"><strong id="tasksCompleted">0</strong><span>Tasks Completed</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Forklift Operator Statistics</h2>
+          <p>Idle time is logged-in time less recorded vehicle work, ad hoc tasks, and approved breaks.</p>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Operator</th>
+                <th>Vehicles</th>
+                <th>Pallets Unloaded</th>
+                <th>Pallets Loaded</th>
+                <th>Tasks</th>
+                <th>Work Time</th>
+                <th>Break Time</th>
+                <th>Idle Time</th>
+              </tr>
+            </thead>
+            <tbody id="operatorStatistics"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Completed Vehicle Movements</h2>
+          <p>Vehicles retained in the operational records after crossdock work was completed.</p>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Completed</th>
+                <th>Vehicle</th>
+                <th>Movement</th>
+                <th>Pallets In</th>
+                <th>Pallets Out</th>
+                <th>Forklift Operator</th>
+                <th>Work Time</th>
+              </tr>
+            </thead>
+            <tbody id="vehicleStatistics"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="apt-crossdock.js?v=20260615-3"></script>
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+
+    function durationLabel(minutes) {
+      const rounded = Math.max(0, Math.round(Number(minutes) || 0));
+      const hours = Math.floor(rounded / 60);
+      const remainder = rounded % 60;
+      return hours ? `${hours}h ${remainder}m` : `${remainder}m`;
+    }
+
+    function vehicleLabel(vehicle) {
+      if (vehicle.type === "local") return vehicle.label;
+      return [vehicle.label, vehicle.vehicleType, vehicle.rego].filter(Boolean).join(" / ");
+    }
+
+    async function renderStatistics() {
+      const statistics = await aptCrossdock.loadStatistics();
+      Object.entries(statistics.overview).forEach(([key, value]) => {
+        const element = document.getElementById(key);
+        if (element) element.textContent = value;
+      });
+      $("#operatorStatistics").innerHTML = statistics.operators.length
+        ? statistics.operators.map((operator) => `
+            <tr>
+              <td><strong>${aptCrossdock.escapeHtml(operator.name)}</strong></td>
+              <td>${operator.vehiclesWorked}</td>
+              <td>${operator.palletsUnloaded}</td>
+              <td>${operator.palletsLoaded}</td>
+              <td>${operator.tasksCompleted}</td>
+              <td>${durationLabel(operator.workMinutes)}</td>
+              <td>${durationLabel(operator.breakMinutes)}</td>
+              <td>${durationLabel(operator.idleMinutes)}</td>
+            </tr>
+          `).join("")
+        : '<tr><td colspan="8">No forklift operator statistics are available yet.</td></tr>';
+      $("#vehicleStatistics").innerHTML = statistics.vehicles.length
+        ? statistics.vehicles.map((vehicle) => `
+            <tr>
+              <td>${aptCrossdock.formatTime(vehicle.completedAt || vehicle.arrivedAt)}</td>
+              <td><strong>${aptCrossdock.escapeHtml(vehicleLabel(vehicle))}</strong></td>
+              <td>${aptCrossdock.escapeHtml(vehicle.movementType || (vehicle.type === "local" ? "Local" : "Not recorded"))}</td>
+              <td>${Number(vehicle.dropoffCount || 0)}</td>
+              <td>${Number(vehicle.pickupCount || 0)}</td>
+              <td>${aptCrossdock.escapeHtml(vehicle.forkliftOperator || "Not recorded")}</td>
+              <td>${durationLabel((new Date(vehicle.completedAt) - new Date(vehicle.workStartedAt)) / 60000)}</td>
+            </tr>
+          `).join("")
+        : '<tr><td colspan="7">No completed vehicle records are available yet.</td></tr>';
+    }
+
+    $("#statisticsLogout").addEventListener("click", async () => {
+      await aptCrossdock.logout();
+      location.href = "manager-queue.html";
+    });
+
+    async function initialiseStatistics() {
+      const user = await aptCrossdock.currentUser();
+      if (!user || user.role !== "manager") {
+        location.href = "manager-queue.html";
+        return;
+      }
+      $("#statisticsPanel").classList.remove("hidden");
+      renderStatistics();
+      setInterval(renderStatistics, 15000);
+    }
+    initialiseStatistics();
+  </script>
+</body>
+</html>
