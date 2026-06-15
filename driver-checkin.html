@@ -39,8 +39,8 @@
           <select id="driverNumber" required>
             <option value="">Select driver number</option>
           </select>
-          <label for="actionsRequired">Actions required</label>
-          <input id="actionsRequired" autocomplete="off" placeholder="Example: Dropping off 4 pallets and reloading for Capalaba" required>
+          <label for="actionsRequired">Actions required (optional)</label>
+          <input id="actionsRequired" autocomplete="off" placeholder="Example: Dropping off 4 pallets and reloading for Capalaba">
           <label for="localExpectedIn">Expected pallets in</label>
           <input id="localExpectedIn" type="number" min="0" step="1" inputmode="numeric" placeholder="0" required>
           <label for="localExpectedOut">Expected pallets out</label>
@@ -475,14 +475,14 @@
       const actionsRequired = $("#actionsRequired").value.trim();
       const expectedPalletsIn = Number($("#localExpectedIn").value || 0);
       const expectedPalletsOut = Number($("#localExpectedOut").value || 0);
-      if (!driverNumber || !profile || !actionsRequired) return;
+      if (!driverNumber || !profile) return;
       const item = await aptCrossdock.addArrival({
         type: "local",
         label: `Driver ${driverNumber}`,
         driverName: profile.driverName,
         rego: profile.rego,
         vehicleType: profile.vehicleType,
-        actionsRequired,
+        actionsRequired: actionsRequired || "No actions specified",
         dropoffCount: expectedPalletsIn,
         pickupCount: expectedPalletsOut,
         phone: profile.phone
