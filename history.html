@@ -73,14 +73,18 @@
       ]);
       const arrivalsById = Object.fromEntries(arrivals.map((arrival) => [arrival.id, arrival]));
       const sorted = [...entries].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      const query = historySearch.value.trim().toLowerCase();
+      const searchTerms = historySearch.value
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
       const filtered = sorted.filter((entry) => {
         if (activeFilter !== "all" && entry.entityType !== activeFilter) return false;
-        if (!query) return true;
-        return [entry.title, entry.action, entry.actor, entry.details, entry.status]
+        if (!searchTerms.length) return true;
+        const searchableText = [entry.title, entry.action, entry.actor, entry.details, entry.status]
           .join(" ")
-          .toLowerCase()
-          .includes(query);
+          .toLowerCase();
+        return searchTerms.every((term) => searchableText.includes(term));
       });
 
       renderMetrics(sorted);
