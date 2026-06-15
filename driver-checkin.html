@@ -336,7 +336,7 @@
         && ["leave-site", "leave-queue"].includes(message.requestType)
         && !message.acknowledgedAt
       );
-      const departureControl = departureApproved
+      const departureControl = departureApproved || item.status === "complete"
         ? `<button class="primary close-driver-screen" type="button">Close Screen</button>`
         : pendingLeaveRequest
           ? `<button class="secondary" type="button" disabled>Leave Request Sent</button>`
@@ -665,6 +665,18 @@
         : [];
       const writtenReason = $("#departureReason").value.trim();
       const reasonParts = [...selectedReasons, writtenReason].filter(Boolean);
+      if (departureRequestType === "leave-site" && selectedReasons.includes("Loading complete")) {
+        await aptCrossdock.setArrivalStatus(arrival.id, "complete", {
+          actualDropoffCount: Number(arrival.actualDropoffCount ?? arrival.dropoffCount ?? 0),
+          actualPickupCount: Number(arrival.actualPickupCount ?? arrival.pickupCount ?? 0),
+          departureConfirmedAt: new Date().toISOString(),
+          actedBy: arrival.driverName || arrival.label
+        });
+        event.target.reset();
+        $("#departureRequestModal").classList.add("hidden");
+        renderDriverStatus();
+        return;
+      }
       await aptCrossdock.sendMessage({
         fromType: "driver",
         fromName: arrival.driverName || arrival.label,
