@@ -77,6 +77,7 @@
                 <th>Pallets In</th>
                 <th>Pallets Out</th>
                 <th>Forklift Operator</th>
+                <th>Waiting Time</th>
                 <th>Work Time</th>
               </tr>
             </thead>
@@ -163,10 +164,11 @@
               <td>${Number(vehicle.dropoffCount || 0)}</td>
               <td>${Number(vehicle.pickupCount || 0)}</td>
               <td>${aptCrossdock.escapeHtml(vehicle.forkliftOperator || "Not recorded")}</td>
+              <td>${durationLabel((new Date(vehicle.workStartedAt || vehicle.completedAt) - new Date(vehicle.arrivedAt)) / 60000)}</td>
               <td>${durationLabel((new Date(vehicle.completedAt) - new Date(vehicle.workStartedAt)) / 60000)}</td>
             </tr>
           `).join("")
-        : '<tr><td colspan="7">No completed vehicle records are available yet.</td></tr>';
+        : '<tr><td colspan="8">No completed vehicle records are available yet.</td></tr>';
     }
 
     $("#statisticsLogout").addEventListener("click", async () => {
