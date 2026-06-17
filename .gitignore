@@ -6,6 +6,7 @@ history.txt
 local-drivers.txt
 forklift-operators.txt
 operator-sessions.txt
+node_modules/
 
 # Local operating system files
 Thumbs.db

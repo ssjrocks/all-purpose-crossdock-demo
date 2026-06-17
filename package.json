@@ -1,0 +1,13 @@
+{
+  "name": "all-purpose-crossdock-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "All Purpose Transport crossdock management demo.",
+  "main": "demo-server.js",
+  "scripts": {
+    "start": "node demo-server.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.5"
+  }
+}

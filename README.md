@@ -10,7 +10,8 @@ history.
 - Node.js 18 or newer
 - A device browser on the same network for mobile testing
 
-No npm packages are required.
+For file-based demo storage, no npm packages are required. For MySQL/MariaDB
+storage, run `npm install` so the server can use the `mysql2` driver.
 
 ## Start the application
 
@@ -50,6 +51,23 @@ to that temporary password from System Configuration.
 The demo stores its working data in JSON-formatted text files beside the server.
 These files are created automatically when the server starts and are excluded
 from Git because they can contain driver, staff, message, and activity data.
+
+The server can also use a MySQL-compatible database by setting environment
+variables before starting it:
+
+```powershell
+$env:CROSSDOCK_STORAGE = "mysql"
+$env:MYSQL_HOST = "127.0.0.1"
+$env:MYSQL_PORT = "3306"
+$env:MYSQL_DATABASE = "crossdock"
+$env:MYSQL_USER = "crossdock_app"
+$env:MYSQL_PASSWORD = "change-this-password"
+node demo-server.js
+```
+
+On first MySQL start, the server creates a `crossdock_collections` table and
+seeds it from any existing runtime text files, preserving the current queue and
+history while moving active storage into the database.
 
 This is a demonstration system. Before production use, add authentication,
 authorization, a managed database, backups, HTTPS, auditing, and appropriate

@@ -1,4 +1,4 @@
-// Lightweight Node.js demo server: static pages, JSON APIs, and text-file persistence.
+// Lightweight Node.js demo server: static pages, JSON APIs, and file/MySQL persistence.
 const http = require("http");
 const fs = require("fs/promises");
 const path = require("path");
@@ -14,6 +14,24 @@ const HISTORY_FILE = path.join(ROOT, "history.txt");
 const LOCAL_DRIVERS_FILE = path.join(ROOT, "local-drivers.txt");
 const FORKLIFT_OPERATORS_FILE = path.join(ROOT, "forklift-operators.txt");
 const OPERATOR_SESSIONS_FILE = path.join(ROOT, "operator-sessions.txt");
+const STORAGE_MODE = (process.env.CROSSDOCK_STORAGE || "file").toLowerCase();
+const MYSQL_CONFIG = {
+  host: process.env.MYSQL_HOST || "127.0.0.1",
+  port: Number(process.env.MYSQL_PORT || 3306),
+  user: process.env.MYSQL_USER || "crossdock_app",
+  password: process.env.MYSQL_PASSWORD || "",
+  database: process.env.MYSQL_DATABASE || "crossdock"
+};
+const COLLECTION_NAMES = new Map([
+  [DATA_FILE, "arrivals"],
+  [TASKS_FILE, "tasks"],
+  [MESSAGES_FILE, "messages"],
+  [HISTORY_FILE, "history"],
+  [LOCAL_DRIVERS_FILE, "local_drivers"],
+  [FORKLIFT_OPERATORS_FILE, "forklift_operators"],
+  [OPERATOR_SESSIONS_FILE, "operator_sessions"]
+]);
+let mysqlPool = null;
 
 // Seed data is only written when its backing file does not already exist.
 const DEFAULT_FORKLIFT_OPERATORS = ["Alex", "Ben", "Chris", "Sam"].map(createDefaultOperator);
@@ -42,8 +60,39 @@ const mimeTypes = {
   ".txt": "text/plain; charset=utf-8"
 };
 
+// MySQL mode stores each logical collection as a JSON payload in one table.
+async function getMysqlPool() {
+  if (STORAGE_MODE !== "mysql") return null;
+  if (mysqlPool) return mysqlPool;
+  let mysql;
+  try {
+    mysql = require("mysql2/promise");
+  } catch {
+    throw new Error("mysql2 is required when CROSSDOCK_STORAGE=mysql. Run npm install first.");
+  }
+  mysqlPool = mysql.createPool({
+    ...MYSQL_CONFIG,
+    waitForConnections: true,
+    connectionLimit: 10,
+    namedPlaceholders: true
+  });
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS crossdock_collections (
+      name VARCHAR(64) PRIMARY KEY,
+      payload LONGTEXT NOT NULL CHECK (JSON_VALID(payload)),
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+  return mysqlPool;
+}
+
+function collectionNameFor(filePath) {
+  return COLLECTION_NAMES.get(filePath) || path.basename(filePath, path.extname(filePath));
+}
+
 // Arrival storage has dedicated helpers because it is the core live queue.
 async function ensureDataFile() {
+  if (STORAGE_MODE === "mysql") return;
   try {
     await fs.access(DATA_FILE);
   } catch {
@@ -52,22 +101,31 @@ async function ensureDataFile() {
 }
 
 async function readArrivals() {
-  await ensureDataFile();
-  const raw = await fs.readFile(DATA_FILE, "utf8");
-  try {
-    const parsed = JSON.parse(raw || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return readCollection(DATA_FILE);
 }
 
 async function writeArrivals(arrivals) {
-  await fs.writeFile(DATA_FILE, JSON.stringify(arrivals, null, 2), "utf8");
+  return writeCollection(DATA_FILE, arrivals);
 }
 
 // Generic collection helpers support tasks, messages, history, profiles, and sessions.
 async function readCollection(filePath) {
+  if (STORAGE_MODE === "mysql") {
+    const pool = await getMysqlPool();
+    const collectionName = collectionNameFor(filePath);
+    const [rows] = await pool.query(
+      "SELECT payload FROM crossdock_collections WHERE name = ?",
+      [collectionName]
+    );
+    if (!rows.length) return [];
+    try {
+      const parsed = JSON.parse(rows[0].payload || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
   try {
     await fs.access(filePath);
   } catch {
@@ -83,11 +141,43 @@ async function readCollection(filePath) {
 }
 
 async function writeCollection(filePath, items) {
+  if (STORAGE_MODE === "mysql") {
+    const pool = await getMysqlPool();
+    await pool.query(
+      `INSERT INTO crossdock_collections (name, payload)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE payload = VALUES(payload)`,
+      [collectionNameFor(filePath), JSON.stringify(Array.isArray(items) ? items : [])]
+    );
+    return;
+  }
+
   await fs.writeFile(filePath, JSON.stringify(items, null, 2), "utf8");
+}
+
+// Seeds a MySQL collection from its existing text file once, preserving live Pi data.
+async function seedMysqlCollectionFromFile(filePath, defaultItems = []) {
+  if (STORAGE_MODE !== "mysql") return;
+  const existing = await readCollection(filePath);
+  if (existing.length) return;
+  let seedItems = defaultItems;
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw || "[]");
+    if (Array.isArray(parsed) && parsed.length) seedItems = parsed;
+  } catch {
+    // Missing or invalid text files are fine; defaults below will be used where supplied.
+  }
+  if (seedItems.length) await writeCollection(filePath, seedItems);
 }
 
 // Ensure manager-editable profile files exist and migrate old operator records to passwords.
 async function ensureLocalDrivers() {
+  if (STORAGE_MODE === "mysql") {
+    await seedMysqlCollectionFromFile(LOCAL_DRIVERS_FILE, DEFAULT_LOCAL_DRIVERS);
+    return;
+  }
+
   try {
     await fs.access(LOCAL_DRIVERS_FILE);
   } catch {
@@ -96,6 +186,19 @@ async function ensureLocalDrivers() {
 }
 
 async function ensureForkliftOperators() {
+  if (STORAGE_MODE === "mysql") {
+    await seedMysqlCollectionFromFile(FORKLIFT_OPERATORS_FILE, DEFAULT_FORKLIFT_OPERATORS);
+    const operators = await readCollection(FORKLIFT_OPERATORS_FILE);
+    let changed = false;
+    const migrated = operators.map((operator) => {
+      if (operator.passwordHash) return operator;
+      changed = true;
+      return createDefaultOperator(operator.name);
+    });
+    if (changed) await writeCollection(FORKLIFT_OPERATORS_FILE, migrated);
+    return;
+  }
+
   try {
     await fs.access(FORKLIFT_OPERATORS_FILE);
   } catch {
@@ -970,6 +1073,11 @@ const server = http.createServer(async (req, res) => {
 // Create missing data stores before accepting requests.
 Promise.all([
   ensureDataFile(),
+  seedMysqlCollectionFromFile(DATA_FILE),
+  seedMysqlCollectionFromFile(TASKS_FILE),
+  seedMysqlCollectionFromFile(MESSAGES_FILE),
+  seedMysqlCollectionFromFile(HISTORY_FILE),
+  seedMysqlCollectionFromFile(OPERATOR_SESSIONS_FILE),
   readCollection(TASKS_FILE),
   readCollection(MESSAGES_FILE),
   readCollection(HISTORY_FILE),
