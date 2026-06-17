@@ -7,6 +7,8 @@ local-drivers.txt
 forklift-operators.txt
 operator-sessions.txt
 node_modules/
+.crossdock-db.env
+crossdock.log
 
 # Local operating system files
 Thumbs.db
